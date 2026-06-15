@@ -20,7 +20,12 @@ class Config:
     # 除外設定
     exclude_paths: tuple[str, ...] = ()          # normcase 済みのフルパス前方一致で除外
     exclude_dir_names: tuple[str, ...] = ()       # 小文字化したディレクトリ名で除外
-    follow_symlinks: bool = False                 # 既定では symlink/junction を辿らない
+    follow_symlinks: bool = False                 # 既定では symlink を辿らない
+    follow_junctions: bool = False                 # 既定では junction を辿らない
+    follow_mount_points: bool = False              # 既定では mount point を辿らない
+    traverse_onedrive_cloud_reparse: bool = True   # 安全に識別できる OneDrive クラウド reparse は辿る
+    record_reparse_points: bool = True             # reparse point の検出/判断を統計に記録する
+    max_reparse_records_in_report: int = 1000      # レポート/manifest に載せる代表パス上限
 
     # 上位 N 件
     top_n_folders: int = 30
@@ -83,6 +88,11 @@ def _coerce(raw: dict, source_path: Optional[str]) -> Config:
         exclude_paths=exclude_paths,
         exclude_dir_names=exclude_dir_names,
         follow_symlinks=bool(raw.get("follow_symlinks", False)),
+        follow_junctions=bool(raw.get("follow_junctions", False)),
+        follow_mount_points=bool(raw.get("follow_mount_points", False)),
+        traverse_onedrive_cloud_reparse=bool(raw.get("traverse_onedrive_cloud_reparse", True)),
+        record_reparse_points=bool(raw.get("record_reparse_points", True)),
+        max_reparse_records_in_report=_as_int(raw, "max_reparse_records_in_report", 1000),
         top_n_folders=_as_int(raw, "top_n_folders", 30),
         top_n_files=_as_int(raw, "top_n_files", 100),
         top_n_extensions=_as_int(raw, "top_n_extensions", 30),

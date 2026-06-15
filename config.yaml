@@ -15,8 +15,18 @@ exclude_dir_names:
 # 注意: node_modules / .venv / AppData / Downloads は「容量を食う要因」として
 #       見たいので、あえて除外していません。
 
-# symlink / junction / reparse point を辿るか（既定 false = 辿らない。安全・循環防止）。
+# --- reparse point / OneDrive Files On-Demand --------------------------
+# symlink は既定 false = 辿らない（循環・二重計上防止）。
 follow_symlinks: false
+# junction / mount point も既定では辿りません。Windows 互換 junction の二重計上を避けます。
+follow_junctions: false
+follow_mount_points: false
+# OneDrive の Cloud 系 reparse point を安全に識別できる場合のみ、メタデータ走査として降ります。
+# ファイル本文は開かず、クラウドファイルの強制ダウンロードは行いません。
+traverse_onedrive_cloud_reparse: true
+# reparse point の検出・降下・スキップ件数と代表パスを manifest / HTML に記録します。
+record_reparse_points: true
+max_reparse_records_in_report: 1000
 
 # --- 上位 N 件 ------------------------------------------------------------
 top_n_folders: 30

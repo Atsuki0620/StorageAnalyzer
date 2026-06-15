@@ -449,6 +449,35 @@
     <div class="section__head"><h2>ログ</h2><span class="hint">アクセスできずスキップした項目</span></div>
     <div class="note">スキップ合計 {{ "{:,}".format(skip_total) }} 件{% if skips|length < skip_total %}（表は先頭 {{ skips|length }} 件。全件は errors.csv を参照）{% endif %}</div>
     <div class="card">
+      <div class="card__head">Scan Coverage / reparse point 対応</div>
+      <div class="card__body">
+        <p class="note">OneDrive のクラウドフォルダは、安全に識別できる場合のみメタデータ走査として辿ります。symlink や junction は循環・二重計上防止のため既定では辿りません。Explorer のプロパティ値との完全一致は保証しません。</p>
+        <div class="dd-stats">
+          <div class="dd-stat"><div class="l">OneDrive cloud 検出</div><div class="v">{{ "{:,}".format(reparse_summary.onedrive_cloud_reparse_detected) }}</div></div>
+          <div class="dd-stat"><div class="l">OneDrive cloud 降下</div><div class="v">{{ "{:,}".format(reparse_summary.onedrive_cloud_reparse_descended) }}</div></div>
+          <div class="dd-stat"><div class="l">OneDrive cloud スキップ</div><div class="v">{{ "{:,}".format(reparse_summary.onedrive_cloud_reparse_skipped) }}</div></div>
+          <div class="dd-stat"><div class="l">symlink スキップ</div><div class="v">{{ "{:,}".format(reparse_summary.symlink_skipped) }}</div></div>
+          <div class="dd-stat"><div class="l">junction スキップ</div><div class="v">{{ "{:,}".format(reparse_summary.junction_skipped) }}</div></div>
+          <div class="dd-stat"><div class="l">その他 reparse スキップ</div><div class="v">{{ "{:,}".format(reparse_summary.other_reparse_skipped + reparse_summary.unknown_reparse_skipped) }}</div></div>
+        </div>
+        <div class="note">設定: OneDrive cloud={{ traverse_onedrive_cloud_reparse }} / symlink={{ follow_symlinks }} / junction={{ follow_junctions }} / mount point={{ follow_mount_points }}</div>
+        {% if reparse_summary.records %}
+        <div class="table-wrap scroll">
+          <table>
+            <thead><tr><th>判断</th><th>種別</th><th>tag</th><th>理由</th><th>パス</th></tr></thead>
+            <tbody>
+            {% for r in reparse_summary.records %}
+              <tr><td><span class="pill">{{ r.action }}</span></td><td>{{ r.kind }}</td><td class="num">{{ r.tag or "" }}</td><td>{{ r.reason }}</td><td class="path" title="{{ r.path | cleanpath }}">{{ r.path | cleanpath }}</td></tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="empty">reparse point の代表記録はありません</div>
+        {% endif %}
+      </div>
+    </div>
+    <div class="card">
       <div class="card__body table-wrap scroll">
         {% if skips %}
         <table>
