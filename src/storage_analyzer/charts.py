@@ -32,6 +32,10 @@ _GRID = "#eef1f5"
 _FONT = '"Segoe UI", "Yu Gothic UI", "Hiragino Sans", Meiryo, system-ui, sans-serif'
 # 円グラフ用の控えめなカテゴリ配色（彩度を抑えた近似色相）
 _PIE_COLORS = ["#3b6ea5", "#6c8ebf", "#9bb3cf", "#c7b28a", "#a8a29e", "#6f8f8a", "#94a3b8", "#b08968"]
+# ツリーマップ/アイシクル用の配色。最も淡い側でも白にならないようにして、
+# 白い区画線（枠線）がどのタイルでも見えるようにする。
+_TREE_COLORSCALE = [[0.0, "#cad9ea"], [0.45, "#7aa3cc"], [1.0, "#234e74"]]
+_TREE_LINE = dict(color="#ffffff", width=1.5)
 
 _PLOTLY_CONFIG = {"responsive": True, "displaylogo": False}
 
@@ -171,16 +175,17 @@ def fig_month_bar(df: pd.DataFrame) -> go.Figure:
     return fig
 
 
-def fig_treemap(folder_direct: dict[str, int], root: str, cfg: Config) -> go.Figure:
-    """フォルダ階層ツリーマップ.
+def _build_hierarchy(
+    folder_direct: dict[str, int], root: str, cfg: Config
+) -> Optional[tuple[list[str], list[str], list[str], list[int], list[str]]]:
+    """フォルダ階層を (ids, labels, parents, values, hover) に組み立てる.
 
     深さ ``treemap_max_depth`` を超えるフォルダはその深さの祖先に畳み込む。各ノードの値は
-    **子孫を含むロールアップ合計**にし、``branchvalues="total"`` を使う。親の値は常に子の合計
-    以上（親の直下分が remainder として表示される）になるため、上位フォルダに絞っても
-    Plotly がエラーにならない。
+    **子孫を含むロールアップ合計**にし、``branchvalues="total"`` 用に親 >= 子合計を保つ。
+    treemap と icicle で共有する。
     """
     if not folder_direct:
-        return _empty_fig("フォルダデータなし")
+        return None
 
     max_depth = cfg.treemap_max_depth
     total: dict[str, int] = defaultdict(int)
@@ -229,6 +234,15 @@ def fig_treemap(folder_direct: dict[str, int], root: str, cfg: Config) -> go.Fig
         else:
             labels.append(os.path.basename(path) or path)
             parents.append(os.path.dirname(path))
+    return ids, labels, parents, values, hover
+
+
+def fig_treemap(folder_direct: dict[str, int], root: str, cfg: Config) -> go.Figure:
+    """フォルダ階層ツリーマップ（面積で容量・クリックでドリルダウン）."""
+    built = _build_hierarchy(folder_direct, root, cfg)
+    if built is None:
+        return _empty_fig("フォルダデータなし")
+    ids, labels, parents, values, hover = built
 
     fig = go.Figure(
         go.Treemap(
@@ -239,12 +253,41 @@ def fig_treemap(folder_direct: dict[str, int], root: str, cfg: Config) -> go.Fig
             branchvalues="total",
             customdata=hover,
             hovertemplate="<b>%{label}</b><br>合計: %{customdata}<br>全体比: %{percentRoot}<extra></extra>",
-            maxdepth=3,
-            tiling=dict(packing="squarify", pad=2),
-            marker=dict(colorscale="Blues", line=dict(color="#ffffff", width=1)),
+            maxdepth=4,
+            tiling=dict(packing="squarify", pad=3),
+            marker=dict(colorscale=_TREE_COLORSCALE, line=_TREE_LINE),
         )
     )
     _style(fig, height=560, has_axes=False)
+    fig.update_layout(margin=dict(l=8, r=8, t=10, b=8))
+    return fig
+
+
+def fig_icicle(folder_direct: dict[str, int], root: str, cfg: Config) -> go.Figure:
+    """フォルダ階層アイシクル（左→右に階層が伸びる・クリックでドリルダウン）.
+
+    サンキー図より階層の入れ子が読み取りやすい。treemap と同じロールアップ階層を使う。
+    """
+    built = _build_hierarchy(folder_direct, root, cfg)
+    if built is None:
+        return _empty_fig("フォルダデータなし")
+    ids, labels, parents, values, hover = built
+
+    fig = go.Figure(
+        go.Icicle(
+            ids=ids,
+            labels=labels,
+            parents=parents,
+            values=values,
+            branchvalues="total",
+            customdata=hover,
+            hovertemplate="<b>%{label}</b><br>合計: %{customdata}<br>全体比: %{percentRoot}<extra></extra>",
+            maxdepth=6,
+            tiling=dict(orientation="h", pad=2),
+            marker=dict(colorscale=_TREE_COLORSCALE, line=_TREE_LINE),
+        )
+    )
+    _style(fig, height=600, has_axes=False)
     fig.update_layout(margin=dict(l=8, r=8, t=10, b=8))
     return fig
 
@@ -362,6 +405,7 @@ def build_all_figures(
         ("extension_bar", fig_extension_bar(agg.extensions, cfg)),
         ("category", fig_category(agg.categories)),
         ("treemap", fig_treemap(agg.folder_direct, root, cfg)),
+        ("icicle", fig_icicle(agg.folder_direct, root, cfg)),
         ("sankey", fig_sankey(agg.sankey_agg, root, cfg)),
         ("month_bar", fig_month_bar(agg.months)),
     ]

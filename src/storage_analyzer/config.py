@@ -36,8 +36,8 @@ class Config:
     # Sankey / Treemap のプルーニング
     sankey_top_l1: int = 12
     sankey_top_l2_per_l1: int = 6
-    treemap_max_depth: int = 4
-    treemap_top_folders: int = 200
+    treemap_max_depth: int = 6
+    treemap_top_folders: int = 300
 
     # Deep Dive（第2階層までの容量 Top N を、さらに数階層掘り下げる）
     deep_dive_top_n: int = 5            # 深掘り対象に選ぶフォルダ数
@@ -92,8 +92,8 @@ def _coerce(raw: dict, source_path: Optional[str]) -> Config:
         recent_threshold_days=_as_int(raw, "recent_threshold_days", 90, minimum=1),
         sankey_top_l1=_as_int(raw, "sankey_top_l1", 12, minimum=1),
         sankey_top_l2_per_l1=_as_int(raw, "sankey_top_l2_per_l1", 6, minimum=1),
-        treemap_max_depth=_as_int(raw, "treemap_max_depth", 4, minimum=1),
-        treemap_top_folders=_as_int(raw, "treemap_top_folders", 200, minimum=1),
+        treemap_max_depth=_as_int(raw, "treemap_max_depth", 6, minimum=1),
+        treemap_top_folders=_as_int(raw, "treemap_top_folders", 300, minimum=1),
         deep_dive_top_n=_as_int(raw, "deep_dive_top_n", 5, minimum=1),
         deep_dive_base_depth=_as_int(raw, "deep_dive_base_depth", 2, minimum=1),
         deep_dive_extra_depth=_as_int(raw, "deep_dive_extra_depth", 5, minimum=1),

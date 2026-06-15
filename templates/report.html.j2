@@ -284,6 +284,7 @@
   <section id="structure" class="section">
     <div class="section__head"><h2>構造</h2><span class="hint">フォルダ階層と容量フロー</span></div>
     <div class="card"><div class="card__head">フォルダ階層ツリーマップ（子孫含む・クリックでドリルダウン）</div><div class="card__body">{{ charts.treemap | safe }}</div></div>
+    <div class="card"><div class="card__head">フォルダ階層アイシクル（左→右に深い階層・クリックでドリルダウン）</div><div class="card__body">{{ charts.icicle | safe }}</div></div>
     <div class="card"><div class="card__head">容量フロー（対象 → 第1階層 → 第2階層 → カテゴリ）</div><div class="card__body">{{ charts.sankey | safe }}</div></div>
   </section>
 
