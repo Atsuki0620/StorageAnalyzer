@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StorageAnalyzer レポート</title>
+<style>
+  :root {
+    --bg: #f4f6f9; --card: #ffffff; --ink: #1f2933; --muted: #6b7785;
+    --accent: #4C78A8; --border: #e3e8ee; --shadow: 0 1px 3px rgba(16,24,40,.08), 0 1px 2px rgba(16,24,40,.06);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: "Segoe UI", "Yu Gothic UI", "Hiragino Sans", Meiryo, system-ui, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    background: linear-gradient(135deg, #34568b, #4C78A8); color: #fff;
+    padding: 22px 28px;
+  }
+  header h1 { margin: 0; font-size: 20px; font-weight: 600; }
+  header .meta { font-size: 13px; opacity: .9; margin-top: 4px; }
+  header .target { font-size: 13px; opacity: .95; margin-top: 6px; word-break: break-all; }
+  main { max-width: 1240px; margin: 0 auto; padding: 22px; }
+  h2 { font-size: 16px; margin: 28px 0 12px; padding-left: 10px; border-left: 4px solid var(--accent); }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; }
+  .kpi {
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px; box-shadow: var(--shadow);
+  }
+  .kpi .label { font-size: 12px; color: var(--muted); }
+  .kpi .value { font-size: 22px; font-weight: 700; margin-top: 6px; word-break: break-all; }
+  .kpi .sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 12px; box-shadow: var(--shadow); margin-bottom: 18px; overflow: hidden;
+  }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 920px) { .grid-2 { grid-template-columns: 1fr; } }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th {
+    position: sticky; top: 0; background: #eef2f7; text-align: left;
+    padding: 8px 10px; border-bottom: 2px solid var(--border); white-space: nowrap;
+  }
+  tbody td { padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tbody tr:nth-child(even) { background: #fafbfc; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .path { color: var(--muted); font-size: 12px; word-break: break-all; max-width: 520px; }
+  .pill {
+    display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px;
+    background: #eaf0f6; color: #34568b; border: 1px solid #d6e0ec;
+  }
+  .scroll { max-height: 460px; overflow: auto; }
+  .note { font-size: 12px; color: var(--muted); margin: 4px 0 10px; }
+  .empty { color: var(--muted); font-size: 13px; padding: 14px; }
+  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 26px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>📊 StorageAnalyzer レポート</h1>
+  <div class="meta">作成日時: {{ kpi.generated_at }} ・ 読み取り専用の診断結果（削除は行いません）</div>
+  <div class="target">スキャン対象: {{ kpi.scan_target }}</div>
+</header>
+
+<main>
+  <!-- KPI -->
+  <section class="kpis">
+    <div class="kpi"><div class="label">合計容量</div><div class="value">{{ kpi.total_size }}</div><div class="sub">{{ kpi.total_bytes }} bytes</div></div>
+    <div class="kpi"><div class="label">ファイル数</div><div class="value">{{ kpi.file_count }}</div></div>
+    <div class="kpi"><div class="label">フォルダ数</div><div class="value">{{ kpi.folder_count }}</div></div>
+    <div class="kpi"><div class="label">スキップ件数</div><div class="value">{{ kpi.skip_count }}</div><div class="sub">権限エラー等</div></div>
+    <div class="kpi"><div class="label">実行時間</div><div class="value">{{ kpi.elapsed }}</div></div>
+    <div class="kpi"><div class="label">スキャン対象</div><div class="value" style="font-size:14px">{{ kpi.scan_target }}</div></div>
+  </section>
+
+  <!-- Charts -->
+  <h2>容量の内訳</h2>
+  <div class="grid-2">
+    <div class="card">{{ charts.folder_bar | safe }}</div>
+    <div class="card">{{ charts.extension_bar | safe }}</div>
+  </div>
+  <div class="grid-2">
+    <div class="card">{{ charts.category | safe }}</div>
+    <div class="card">{{ charts.month_bar | safe }}</div>
+  </div>
+
+  <h2>フォルダ階層ツリーマップ</h2>
+  <div class="card">{{ charts.treemap | safe }}</div>
+
+  <h2>容量フロー（サンキー図）</h2>
+  <div class="card">{{ charts.sankey | safe }}</div>
+
+  <!-- Category table -->
+  <h2>カテゴリ別容量</h2>
+  <div class="card scroll">
+    {% if categories %}
+    <table>
+      <thead><tr><th>カテゴリ</th><th class="num">容量</th><th class="num">割合</th><th class="num">MB</th></tr></thead>
+      <tbody>
+      {% for r in categories %}
+        <tr><td><span class="pill">{{ r.category }}</span></td><td class="num">{{ r.size_human }}</td><td class="num">{{ "%.2f"|format(r.pct) }} %</td><td class="num">{{ "{:,.1f}".format(r.size_mb) }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<div class="empty">データなし</div>{% endif %}
+  </div>
+
+  <!-- Top files -->
+  <h2>巨大ファイル Top {{ top_n_files }}</h2>
+  <div class="card scroll">
+    {% if top_files %}
+    <table>
+      <thead><tr><th>#</th><th>ファイル名</th><th class="num">サイズ</th><th>カテゴリ</th><th>更新日時</th><th>パス</th></tr></thead>
+      <tbody>
+      {% for r in top_files %}
+        <tr><td class="num">{{ loop.index }}</td><td>{{ r.name }}</td><td class="num">{{ r.size_human }}</td><td><span class="pill">{{ r.category }}</span></td><td class="num">{{ r.modified_at }}</td><td class="path">{{ r.path }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<div class="empty">データなし</div>{% endif %}
+  </div>
+
+  <!-- Old / Recent large -->
+  <div class="grid-2">
+    <div>
+      <h2>古い巨大ファイル（{{ old_threshold_days }}日以上前に更新）</h2>
+      <div class="card scroll">
+        {% if old_large %}
+        <table>
+          <thead><tr><th>ファイル名</th><th class="num">サイズ</th><th>更新日時</th></tr></thead>
+          <tbody>
+          {% for r in old_large %}
+            <tr><td>{{ r.name }}<div class="path">{{ r.path }}</div></td><td class="num">{{ r.size_human }}</td><td class="num">{{ r.modified_at }}</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        {% else %}<div class="empty">該当なし</div>{% endif %}
+      </div>
+    </div>
+    <div>
+      <h2>最近更新された巨大ファイル（{{ recent_threshold_days }}日以内）</h2>
+      <div class="card scroll">
+        {% if recent_large %}
+        <table>
+          <thead><tr><th>ファイル名</th><th class="num">サイズ</th><th>更新日時</th></tr></thead>
+          <tbody>
+          {% for r in recent_large %}
+            <tr><td>{{ r.name }}<div class="path">{{ r.path }}</div></td><td class="num">{{ r.size_human }}</td><td class="num">{{ r.modified_at }}</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        {% else %}<div class="empty">該当なし</div>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Skips -->
+  <h2>スキップ / エラーログ</h2>
+  <div class="note">スキップ合計 {{ "{:,}".format(skip_total) }} 件{% if skips|length < skip_total %}（表は先頭 {{ skips|length }} 件。全件は storage_errors_*.csv を参照）{% endif %}</div>
+  <div class="card scroll">
+    {% if skips %}
+    <table>
+      <thead><tr><th>エラー種別</th><th>メッセージ</th><th>パス</th></tr></thead>
+      <tbody>
+      {% for r in skips %}
+        <tr><td><span class="pill">{{ r.error_type }}</span></td><td>{{ r.error_message }}</td><td class="path">{{ r.path }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<div class="empty">スキップはありませんでした 🎉</div>{% endif %}
+  </div>
+</main>
+
+<footer>
+  StorageAnalyzer v0.1 ・ 読み取り専用 ・ このレポートは単体で閲覧できます
+</footer>
+</body>
+</html>

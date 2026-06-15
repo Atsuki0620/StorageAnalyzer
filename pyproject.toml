@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "storage-analyzer"
+version = "0.1.0"
+description = "Windows ローカルストレージ分析ツール（読み取り専用・HTML レポート出力）"
+requires-python = ">=3.11"
+dependencies = [
+    "pandas>=2.0",
+    "plotly>=5.18",
+    "jinja2>=3.1",
+    "pyyaml>=6.0",
+    "tqdm>=4.66",
+]
+
+[project.scripts]
+storage-analyzer = "storage_analyzer.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+# 注意: テンプレート/設定はリポジトリ直下に置き、resource_path() で解決する。
+# PyInstaller では build_exe.ps1 の --add-data で同梱する。

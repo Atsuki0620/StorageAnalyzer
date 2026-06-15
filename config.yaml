@@ -1,0 +1,42 @@
+# StorageAnalyzer 設定ファイル
+# 読み取り専用の診断ツールです。削除・移動は一切行いません。
+
+# --- 除外設定 -------------------------------------------------------------
+# フルパス前方一致で除外（大文字小文字は無視）。Windows のシステム領域など。
+exclude_paths:
+  - "C:\\System Volume Information"
+  - "C:\\$Recycle.Bin"
+  - "C:\\Windows\\WinSxS"
+
+# ディレクトリ名で除外（どの階層でも一致したら配下ごとスキップ）。
+exclude_dir_names:
+  - ".git"
+
+# 注意: node_modules / .venv / AppData / Downloads は「容量を食う要因」として
+#       見たいので、あえて除外していません。
+
+# symlink / junction / reparse point を辿るか（既定 false = 辿らない。安全・循環防止）。
+follow_symlinks: false
+
+# --- 上位 N 件 ------------------------------------------------------------
+top_n_folders: 30
+top_n_files: 100
+top_n_extensions: 30
+top_n_old_large: 50
+top_n_recent_large: 50
+
+# --- 「古い」「最近」の判定しきい値（日数） -------------------------------
+old_threshold_days: 365      # これより前に更新 = 古い
+recent_threshold_days: 90    # これ以内に更新 = 最近
+
+# --- グラフのプルーニング（複雑になりすぎないように上位へ絞る） -----------
+sankey_top_l1: 12            # サンキー: 第1階層フォルダの上位件数
+sankey_top_l2_per_l1: 6      # サンキー: 第1階層ごとの第2階層の上位件数
+treemap_max_depth: 4         # ツリーマップ: この深さより下は祖先に畳み込む
+treemap_top_folders: 200     # ツリーマップ: 表示フォルダ数の上限
+
+# --- Windows 長パス対応（\\?\ プレフィックス）。Windows 以外では無視。 ----
+use_long_path_prefix: true
+
+# 表に出す最小サイズ（バイト）。0 で無効。
+min_size_bytes_for_tables: 0
