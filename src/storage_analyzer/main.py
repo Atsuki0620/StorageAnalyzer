@@ -22,14 +22,22 @@ from storage_analyzer import __version__
 from storage_analyzer.aggregator import Aggregator
 from storage_analyzer.charts import build_all_figures
 from storage_analyzer.config import load_config
-from storage_analyzer.report import render_report, write_errors_csv, write_records_csv
+from storage_analyzer.deepdive import compute_deep_dive, select_top_folders
+from storage_analyzer.report import (
+    render_report,
+    write_errors_csv,
+    write_manifest,
+    write_records_csv,
+)
 from storage_analyzer.scanner import ScanStats, Scanner
 from storage_analyzer.utils import (
     ensure_output_dir,
     human_size,
     normalize_long_path,
-    now_stamp,
+    run_stamp,
+    safe_target_name,
     try_open_browser,
+    unique_dir,
 )
 
 
@@ -82,16 +90,25 @@ def _run_scan(scanner: Scanner, root: str, estimate: Optional[int], rec_sink, ag
             bar.update(1)
 
 
-def _print_summary(stats: ScanStats, csv_path: str, err_path: str, html_path: str) -> None:
+def _print_summary(
+    stats: ScanStats,
+    run_dir: str,
+    html_path: str,
+    csv_path: str,
+    err_path: str,
+    manifest_path: str,
+) -> None:
     print("\n========== 完了 ==========")
     print(f"  合計容量    : {human_size(stats.total_bytes)} ({stats.total_bytes:,} bytes)")
     print(f"  ファイル数  : {stats.file_count:,}")
     print(f"  フォルダ数  : {stats.folder_count:,}")
     print(f"  スキップ    : {stats.skip_count:,}")
     print(f"  実行時間    : {stats.elapsed_s:.1f} 秒")
+    print(f"  実行フォルダ: {run_dir}")
+    print(f"  HTML        : {html_path}")
     print(f"  CSV         : {csv_path}")
     print(f"  エラー CSV  : {err_path}")
-    print(f"  HTML        : {html_path}")
+    print(f"  manifest    : {manifest_path}")
     print("==========================")
 
 
@@ -111,11 +128,16 @@ def main(argv: Optional[list[str]] = None) -> int:
         return 2
 
     scan_root = normalize_long_path(target, cfg.use_long_path_prefix)
-    out_dir = ensure_output_dir(args.output_dir)
-    stamp = now_stamp()
-    csv_path = os.path.join(out_dir, f"storage_scan_{stamp}.csv")
-    err_path = os.path.join(out_dir, f"storage_errors_{stamp}.csv")
-    html_path = os.path.join(out_dir, f"storage_report_{stamp}.html")
+
+    # 実行ごとの専用フォルダ: output/<YYYY-MM-DD_HH-mm>_<safe_target>/
+    parent_dir = ensure_output_dir(args.output_dir)
+    target_label = safe_target_name(target)
+    run_dir = unique_dir(os.path.join(parent_dir, f"{run_stamp()}_{target_label}"))
+    os.makedirs(run_dir, exist_ok=True)
+    html_path = os.path.join(run_dir, "report.html")
+    csv_path = os.path.join(run_dir, "scan.csv")
+    err_path = os.path.join(run_dir, "errors.csv")
+    manifest_path = os.path.join(run_dir, "manifest.json")
 
     stats = ScanStats(started_at=time.time())
     agg = Aggregator(cfg, root=scan_root)
@@ -142,19 +164,31 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     stats.finished_at = time.time()
 
-    # [4/6] 集計
+    # [4/6] 集計（+ 深掘り集計: scan.csv を chunk で読み直す）
     print("[4/6] 集計中 ...")
     result = agg.finalize()
+    print("      深掘り集計中（Top フォルダ）...")
+    top_folders = select_top_folders(result.folder_direct, scan_root, cfg)
+    deep_dives = compute_deep_dive(csv_path, top_folders, scan_root, cfg, result.total_bytes)
 
     # [5/6] グラフ生成
     print("[5/6] グラフ生成中 ...")
-    figures = build_all_figures(result, scan_root, cfg, use_cdn=args.cdn)
+    figures = build_all_figures(result, scan_root, cfg, deep_dives=deep_dives, use_cdn=args.cdn)
 
-    # [6/6] レポート出力
+    # [6/6] レポート出力（HTML + manifest.json）
     print("[6/6] レポート出力中 ...")
-    render_report(html_path, stats=stats, agg=result, figures=figures, cfg=cfg, scan_target=target)
+    render_report(
+        html_path, stats=stats, agg=result, figures=figures, cfg=cfg,
+        scan_target=target, deep_dives=deep_dives,
+    )
+    write_manifest(
+        manifest_path, stats=stats, cfg=cfg,
+        target_original=target, target_normalized=scan_root, target_label=target_label,
+        output_dir=run_dir, report_path=html_path,
+        scan_csv_path=csv_path, errors_csv_path=err_path,
+    )
 
-    _print_summary(stats, csv_path, err_path, html_path)
+    _print_summary(stats, run_dir, html_path, csv_path, err_path, manifest_path)
 
     if not args.no_open:
         if try_open_browser(html_path):
