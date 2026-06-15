@@ -100,6 +100,69 @@ def now_stamp() -> str:
     return datetime.now().strftime("%Y%m%d_%H%M%S")
 
 
+def run_stamp() -> str:
+    """実行フォルダ名用のタイムスタンプ ``YYYY-MM-DD_HH-mm``（分精度）を返す."""
+    return datetime.now().strftime("%Y-%m-%d_%H-%M")
+
+
+# Windows でファイル名・フォルダ名に使えない文字
+_INVALID_NAME_CHARS = ':\\/*?"<>|'
+
+
+def strip_long_path_prefix(path: str) -> str:
+    """Windows の長パスプレフィックス（``\\\\?\\`` / ``\\\\?\\UNC\\``）を外す."""
+    if path.startswith("\\\\?\\UNC\\"):
+        return "\\\\" + path[len("\\\\?\\UNC\\"):]
+    if path.startswith("\\\\?\\"):
+        return path[len("\\\\?\\"):]
+    return path
+
+
+def display_path(path: Optional[str]) -> str:
+    """表示用にパスを整える。長パスプレフィックスを外す。None/空は空文字へ."""
+    if not path:
+        return ""
+    return strip_long_path_prefix(str(path))
+
+
+def safe_target_name(target: str, max_len: int = 100) -> str:
+    """対象パスを Windows で安全なフォルダ名に変換する.
+
+    例: ``C:\\Users\\atsuk`` -> ``C_Users_atsuk`` / ``D:\\Video Library`` ->
+    ``D_Video_Library`` / ``C:\\`` -> ``C_root``。禁止文字と空白を ``_`` に置換し、
+    連続 ``_`` を畳んで端を整える。
+    """
+    p = strip_long_path_prefix(str(target)).strip()
+
+    # ドライブルート（"C:\" / "C:" / "C:/"）は "<letter>_root"
+    if len(p) >= 2 and p[1] == ":" and p[0].isalpha():
+        rest = p[2:].replace("/", "\\").strip("\\")
+        if not rest:
+            return f"{p[0].upper()}_root"
+
+    for ch in _INVALID_NAME_CHARS:
+        p = p.replace(ch, "_")
+    p = p.replace(" ", "_")
+    while "__" in p:
+        p = p.replace("__", "_")
+    p = p.strip("_. ")  # 末尾のドット/空白は Windows で不可
+    if not p:
+        p = "root"
+    if len(p) > max_len:
+        p = p[:max_len].strip("_. ") or "root"
+    return p
+
+
+def unique_dir(path: str) -> str:
+    """``path`` が既存なら ``_2``, ``_3`` … を付けて未使用のパスを返す."""
+    if not os.path.exists(path):
+        return path
+    n = 2
+    while os.path.exists(f"{path}_{n}"):
+        n += 1
+    return f"{path}_{n}"
+
+
 def normalize_long_path(root: str, enabled: bool) -> str:
     """スキャンルートを絶対パス化し、Windows では任意で長パス prefix（``\\\\?\\``）を付ける.
 

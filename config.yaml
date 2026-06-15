@@ -32,8 +32,16 @@ recent_threshold_days: 90    # これ以内に更新 = 最近
 # --- グラフのプルーニング（複雑になりすぎないように上位へ絞る） -----------
 sankey_top_l1: 12            # サンキー: 第1階層フォルダの上位件数
 sankey_top_l2_per_l1: 6      # サンキー: 第1階層ごとの第2階層の上位件数
-treemap_max_depth: 4         # ツリーマップ: この深さより下は祖先に畳み込む
-treemap_top_folders: 200     # ツリーマップ: 表示フォルダ数の上限
+treemap_max_depth: 6         # ツリーマップ/アイシクル: この深さより下は祖先に畳み込む（深掘り用に深め）
+treemap_top_folders: 300     # ツリーマップ/アイシクル: 表示フォルダ数の上限
+
+# --- Deep Dive（第2階層までの容量 Top N を、さらに数階層掘り下げる） -------
+deep_dive_top_n: 5           # 深掘り対象に選ぶフォルダ数（タブ数）
+deep_dive_base_depth: 2      # 対象から見た「Top」候補の相対階層（既定 = 第2階層）
+deep_dive_extra_depth: 5     # 各 Top の配下を追加で掘り下げる階層数
+deep_dive_top_files: 50      # 各 Top 配下の巨大ファイル表示数
+deep_dive_top_extensions: 20 # 各 Top 配下の拡張子別ランキング数
+deep_dive_top_folders: 50    # 各 Top 配下のフォルダ別ランキング数
 
 # --- Windows 長パス対応（\\?\ プレフィックス）。Windows 以外では無視。 ----
 use_long_path_prefix: true

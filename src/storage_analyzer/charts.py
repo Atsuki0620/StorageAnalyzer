@@ -18,28 +18,59 @@ import plotly.graph_objects as go
 
 from storage_analyzer.aggregator import AggregateResult
 from storage_analyzer.config import Config
-from storage_analyzer.utils import human_size, path_segments
+from storage_analyzer.utils import display_path, human_size, path_segments
 
 _GIB = 1024 ** 3
-_PRIMARY = "#4C78A8"
-_ACCENT = "#F58518"
-_TEAL = "#72B7B2"
+
+# ニュートラル・スレート配色（落ち着いた SaaS ダッシュボード向け・単色アクセント中心）
+_PRIMARY = "#3b6ea5"   # メインのスレートブルー
+_ACCENT = "#6c8ebf"    # サブ（淡いスレート）
+_TEAL = "#7a9cc6"      # 時系列など
+_INK = "#1f2933"
+_MUTED = "#64748b"
+_GRID = "#eef1f5"
+_FONT = '"Segoe UI", "Yu Gothic UI", "Hiragino Sans", Meiryo, system-ui, sans-serif'
+# 円グラフ用の控えめなカテゴリ配色（彩度を抑えた近似色相）
+_PIE_COLORS = ["#3b6ea5", "#6c8ebf", "#9bb3cf", "#c7b28a", "#a8a29e", "#6f8f8a", "#94a3b8", "#b08968"]
+# ツリーマップ/アイシクル用の配色。最も淡い側でも白にならないようにして、
+# 白い区画線（枠線）がどのタイルでも見えるようにする。
+_TREE_COLORSCALE = [[0.0, "#cad9ea"], [0.45, "#7aa3cc"], [1.0, "#234e74"]]
+_TREE_LINE = dict(color="#ffffff", width=1.5)
+
 _PLOTLY_CONFIG = {"responsive": True, "displaylogo": False}
 
 
 # --------------------------------------------------------------------------- #
 # 共通ヘルパ
 # --------------------------------------------------------------------------- #
-def _empty_fig(text: str) -> go.Figure:
-    fig = go.Figure()
-    fig.add_annotation(text=text, showarrow=False, font=dict(size=16, color="#888"))
+def _style(fig: go.Figure, *, title: Optional[str] = None, height: Optional[int] = None,
+           has_axes: bool = True) -> go.Figure:
+    """全図に共通のレイアウト（フォント・余白・透明背景・控えめなグリッド）を適用する."""
     fig.update_layout(
         template="plotly_white",
-        margin=dict(l=10, r=10, t=40, b=10),
-        height=300,
-        xaxis=dict(visible=False),
-        yaxis=dict(visible=False),
+        font=dict(family=_FONT, size=12, color=_INK),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        margin=dict(l=12, r=14, t=46 if title else 16, b=40),
+        hoverlabel=dict(font=dict(family=_FONT, size=12), bgcolor="#ffffff"),
+        title=dict(text=title, font=dict(size=14, color=_INK), x=0.01, xanchor="left", y=0.97)
+        if title else None,
     )
+    if height is not None:
+        fig.update_layout(height=height)
+    if has_axes:
+        fig.update_xaxes(gridcolor=_GRID, zeroline=False, linecolor=_GRID, ticks="outside",
+                         tickcolor=_GRID, tickfont=dict(color=_MUTED))
+        fig.update_yaxes(gridcolor=_GRID, zeroline=False, linecolor=_GRID,
+                         tickfont=dict(color=_MUTED))
+    return fig
+
+
+def _empty_fig(text: str) -> go.Figure:
+    fig = go.Figure()
+    fig.add_annotation(text=text, showarrow=False, font=dict(size=14, color=_MUTED))
+    _style(fig, height=260, has_axes=False)
+    fig.update_layout(xaxis=dict(visible=False), yaxis=dict(visible=False))
     return fig
 
 
@@ -69,14 +100,9 @@ def _hbar(full_labels: list[str], short_labels: list[str], sizes: list[int],
             hovertemplate="%{customdata[0]}<br><b>%{customdata[1]}</b><extra></extra>",
         )
     )
+    _style(fig, title=title, height=max(340, 24 * len(sizes) + 120))
     fig.update_yaxes(tickmode="array", tickvals=ypos, ticktext=short_labels, automargin=True)
-    fig.update_layout(
-        title=title,
-        xaxis_title="サイズ (GB)",
-        template="plotly_white",
-        margin=dict(l=10, r=10, t=50, b=40),
-        height=max(360, 24 * len(sizes) + 120),
-    )
+    fig.update_xaxes(title=dict(text="サイズ (GB)", font=dict(color=_MUTED, size=11)))
     return fig
 
 
@@ -98,7 +124,7 @@ def fig_folder_bar(df: pd.DataFrame, cfg: Config) -> go.Figure:
     full = [str(x) for x in d["parent"]]
     short = [_short_label(p) for p in full]
     sizes = [int(x) for x in d["size_bytes"]]
-    return _hbar(full, short, sizes, f"フォルダ別容量 Top {len(df)}（子孫含む）", _PRIMARY)
+    return _hbar(full, short, sizes, "", _PRIMARY)
 
 
 def fig_extension_bar(df: pd.DataFrame, cfg: Config) -> go.Figure:
@@ -107,7 +133,7 @@ def fig_extension_bar(df: pd.DataFrame, cfg: Config) -> go.Figure:
     d = df.iloc[::-1]
     labels = [str(x) for x in d["extension"]]
     sizes = [int(x) for x in d["size_bytes"]]
-    return _hbar(labels, labels, sizes, f"拡張子別容量 Top {len(df)}", _ACCENT)
+    return _hbar(labels, labels, sizes, "", _ACCENT)
 
 
 def fig_category(df: pd.DataFrame) -> go.Figure:
@@ -120,16 +146,13 @@ def fig_category(df: pd.DataFrame) -> go.Figure:
             customdata=[str(x) for x in df["size_human"]],
             textinfo="label+percent",
             hovertemplate="<b>%{label}</b><br>%{customdata}<br>%{percent}<extra></extra>",
-            hole=0.35,
+            hole=0.55,
             sort=True,
+            marker=dict(colors=_PIE_COLORS, line=dict(color="#ffffff", width=1)),
         )
     )
-    fig.update_layout(
-        title="カテゴリ別容量",
-        template="plotly_white",
-        margin=dict(l=10, r=10, t=50, b=10),
-        height=460,
-    )
+    _style(fig, height=420, has_axes=False)
+    fig.update_layout(legend=dict(font=dict(size=11, color=_MUTED)))
     return fig
 
 
@@ -146,27 +169,23 @@ def fig_month_bar(df: pd.DataFrame) -> go.Figure:
             hovertemplate="%{x}<br><b>%{customdata}</b><extra></extra>",
         )
     )
-    fig.update_layout(
-        title="更新年月別容量",
-        xaxis_title="更新年月",
-        yaxis_title="サイズ (GB)",
-        template="plotly_white",
-        margin=dict(l=10, r=10, t=50, b=40),
-        height=400,
-    )
+    _style(fig, height=380)
+    fig.update_xaxes(title=dict(text="更新年月", font=dict(color=_MUTED, size=11)))
+    fig.update_yaxes(title=dict(text="サイズ (GB)", font=dict(color=_MUTED, size=11)))
     return fig
 
 
-def fig_treemap(folder_direct: dict[str, int], root: str, cfg: Config) -> go.Figure:
-    """フォルダ階層ツリーマップ.
+def _build_hierarchy(
+    folder_direct: dict[str, int], root: str, cfg: Config
+) -> Optional[tuple[list[str], list[str], list[str], list[int], list[str]]]:
+    """フォルダ階層を (ids, labels, parents, values, hover) に組み立てる.
 
     深さ ``treemap_max_depth`` を超えるフォルダはその深さの祖先に畳み込む。各ノードの値は
-    **子孫を含むロールアップ合計**にし、``branchvalues="total"`` を使う。親の値は常に子の合計
-    以上（親の直下分が remainder として表示される）になるため、上位フォルダに絞っても
-    Plotly がエラーにならない。
+    **子孫を含むロールアップ合計**にし、``branchvalues="total"`` 用に親 >= 子合計を保つ。
+    treemap と icicle で共有する。
     """
     if not folder_direct:
-        return _empty_fig("フォルダデータなし")
+        return None
 
     max_depth = cfg.treemap_max_depth
     total: dict[str, int] = defaultdict(int)
@@ -209,11 +228,21 @@ def fig_treemap(folder_direct: dict[str, int], root: str, cfg: Config) -> go.Fig
         values.append(val)
         hover.append(human_size(val))
         if path == root:
-            labels.append(root)
+            clean = display_path(root).rstrip("\\/")
+            labels.append(os.path.basename(clean) or clean or display_path(root))
             parents.append("")
         else:
             labels.append(os.path.basename(path) or path)
             parents.append(os.path.dirname(path))
+    return ids, labels, parents, values, hover
+
+
+def fig_treemap(folder_direct: dict[str, int], root: str, cfg: Config) -> go.Figure:
+    """フォルダ階層ツリーマップ（面積で容量・クリックでドリルダウン）."""
+    built = _build_hierarchy(folder_direct, root, cfg)
+    if built is None:
+        return _empty_fig("フォルダデータなし")
+    ids, labels, parents, values, hover = built
 
     fig = go.Figure(
         go.Treemap(
@@ -224,17 +253,42 @@ def fig_treemap(folder_direct: dict[str, int], root: str, cfg: Config) -> go.Fig
             branchvalues="total",
             customdata=hover,
             hovertemplate="<b>%{label}</b><br>合計: %{customdata}<br>全体比: %{percentRoot}<extra></extra>",
-            maxdepth=3,
-            tiling=dict(packing="squarify"),
-            marker=dict(colorscale="Blues"),
+            maxdepth=4,
+            tiling=dict(packing="squarify", pad=3),
+            marker=dict(colorscale=_TREE_COLORSCALE, line=_TREE_LINE),
         )
     )
-    fig.update_layout(
-        title="フォルダ階層ツリーマップ（容量・子孫含む）",
-        template="plotly_white",
-        margin=dict(l=10, r=10, t=50, b=10),
-        height=620,
+    _style(fig, height=560, has_axes=False)
+    fig.update_layout(margin=dict(l=8, r=8, t=10, b=8))
+    return fig
+
+
+def fig_icicle(folder_direct: dict[str, int], root: str, cfg: Config) -> go.Figure:
+    """フォルダ階層アイシクル（左→右に階層が伸びる・クリックでドリルダウン）.
+
+    サンキー図より階層の入れ子が読み取りやすい。treemap と同じロールアップ階層を使う。
+    """
+    built = _build_hierarchy(folder_direct, root, cfg)
+    if built is None:
+        return _empty_fig("フォルダデータなし")
+    ids, labels, parents, values, hover = built
+
+    fig = go.Figure(
+        go.Icicle(
+            ids=ids,
+            labels=labels,
+            parents=parents,
+            values=values,
+            branchvalues="total",
+            customdata=hover,
+            hovertemplate="<b>%{label}</b><br>合計: %{customdata}<br>全体比: %{percentRoot}<extra></extra>",
+            maxdepth=6,
+            tiling=dict(orientation="h", pad=2),
+            marker=dict(colorscale=_TREE_COLORSCALE, line=_TREE_LINE),
+        )
     )
+    _style(fig, height=600, has_axes=False)
+    fig.update_layout(margin=dict(l=8, r=8, t=10, b=8))
     return fig
 
 
@@ -314,39 +368,50 @@ def fig_sankey(sankey_agg: dict[tuple[str, str, str], int], root: str, cfg: Conf
     customdata = [human_size(v) for v in val]
     fig = go.Figure(
         go.Sankey(
-            node=dict(label=node_labels, pad=12, thickness=14, color="#9ecae1"),
+            node=dict(label=node_labels, pad=14, thickness=14, color="#9bb3cf",
+                      line=dict(color="#ffffff", width=0.5)),
             link=dict(
                 source=src,
                 target=tgt,
                 value=val,
+                color="rgba(59,110,165,0.18)",
                 customdata=customdata,
                 hovertemplate="%{source.label} → %{target.label}<br><b>%{customdata}</b><extra></extra>",
             ),
         )
     )
-    fig.update_layout(
-        title="容量フロー（対象 → 第1階層 → 第2階層 → カテゴリ）",
-        template="plotly_white",
-        margin=dict(l=10, r=10, t=50, b=10),
-        height=620,
-        font=dict(size=11),
-    )
+    _style(fig, height=560, has_axes=False)
+    fig.update_layout(margin=dict(l=10, r=10, t=12, b=10), font=dict(family=_FONT, size=11, color=_INK))
     return fig
 
 
 # --------------------------------------------------------------------------- #
 # フラグメント化
 # --------------------------------------------------------------------------- #
-def build_all_figures(agg: AggregateResult, root: str, cfg: Config, use_cdn: bool = False) -> dict[str, str]:
-    """全図を生成し、{名前: HTML 断片} を返す。先頭図にだけ plotly.js を同梱."""
+def build_all_figures(
+    agg: AggregateResult,
+    root: str,
+    cfg: Config,
+    deep_dives: Optional[list] = None,
+    use_cdn: bool = False,
+) -> dict[str, str]:
+    """全図を生成し、{名前: HTML 断片} を返す。先頭図にだけ plotly.js を同梱.
+
+    深掘り（Top フォルダ）の treemap は ``deep_treemap_{i}`` キーで返す。全フラグメントを
+    通して plotly.js は **最初の 1 つだけ** に同梱する（インライン or CDN）。
+    """
     figs: list[tuple[str, go.Figure]] = [
         ("folder_bar", fig_folder_bar(agg.folders, cfg)),
         ("extension_bar", fig_extension_bar(agg.extensions, cfg)),
         ("category", fig_category(agg.categories)),
         ("treemap", fig_treemap(agg.folder_direct, root, cfg)),
+        ("icicle", fig_icicle(agg.folder_direct, root, cfg)),
         ("sankey", fig_sankey(agg.sankey_agg, root, cfg)),
         ("month_bar", fig_month_bar(agg.months)),
     ]
+    for i, dd in enumerate(deep_dives or []):
+        figs.append((f"deep_treemap_{i}", fig_treemap(dd.folder_direct_sub, dd.raw_path, cfg)))
+
     fragments: dict[str, str] = {}
     first = True
     for name, fig in figs:

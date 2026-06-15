@@ -36,8 +36,16 @@ class Config:
     # Sankey / Treemap のプルーニング
     sankey_top_l1: int = 12
     sankey_top_l2_per_l1: int = 6
-    treemap_max_depth: int = 4
-    treemap_top_folders: int = 200
+    treemap_max_depth: int = 6
+    treemap_top_folders: int = 300
+
+    # Deep Dive（第2階層までの容量 Top N を、さらに数階層掘り下げる）
+    deep_dive_top_n: int = 5            # 深掘り対象に選ぶフォルダ数
+    deep_dive_base_depth: int = 2       # 対象から見た「Top」候補の相対階層
+    deep_dive_extra_depth: int = 5      # 各 Top の配下を追加で掘り下げる階層数
+    deep_dive_top_files: int = 50       # 各 Top 配下の巨大ファイル表示数
+    deep_dive_top_extensions: int = 20  # 各 Top 配下の拡張子別ランキング数
+    deep_dive_top_folders: int = 50     # 各 Top 配下のフォルダ別ランキング数
 
     # Windows 長パス prefix（\\?\）。Windows 以外では無視される。
     use_long_path_prefix: bool = True
@@ -84,8 +92,14 @@ def _coerce(raw: dict, source_path: Optional[str]) -> Config:
         recent_threshold_days=_as_int(raw, "recent_threshold_days", 90, minimum=1),
         sankey_top_l1=_as_int(raw, "sankey_top_l1", 12, minimum=1),
         sankey_top_l2_per_l1=_as_int(raw, "sankey_top_l2_per_l1", 6, minimum=1),
-        treemap_max_depth=_as_int(raw, "treemap_max_depth", 4, minimum=1),
-        treemap_top_folders=_as_int(raw, "treemap_top_folders", 200, minimum=1),
+        treemap_max_depth=_as_int(raw, "treemap_max_depth", 6, minimum=1),
+        treemap_top_folders=_as_int(raw, "treemap_top_folders", 300, minimum=1),
+        deep_dive_top_n=_as_int(raw, "deep_dive_top_n", 5, minimum=1),
+        deep_dive_base_depth=_as_int(raw, "deep_dive_base_depth", 2, minimum=1),
+        deep_dive_extra_depth=_as_int(raw, "deep_dive_extra_depth", 5, minimum=1),
+        deep_dive_top_files=_as_int(raw, "deep_dive_top_files", 50, minimum=1),
+        deep_dive_top_extensions=_as_int(raw, "deep_dive_top_extensions", 20, minimum=1),
+        deep_dive_top_folders=_as_int(raw, "deep_dive_top_folders", 50, minimum=1),
         use_long_path_prefix=bool(raw.get("use_long_path_prefix", True)),
         min_size_bytes_for_tables=_as_int(raw, "min_size_bytes_for_tables", 0),
         source_path=source_path,

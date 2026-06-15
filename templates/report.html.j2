@@ -3,178 +3,517 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>StorageAnalyzer レポート</title>
+<title>StorageAnalyzer レポート — {{ kpi.scan_target }}</title>
 <style>
   :root {
-    --bg: #f4f6f9; --card: #ffffff; --ink: #1f2933; --muted: #6b7785;
-    --accent: #4C78A8; --border: #e3e8ee; --shadow: 0 1px 3px rgba(16,24,40,.08), 0 1px 2px rgba(16,24,40,.06);
+    --bg: #f7f8fa;
+    --surface: #ffffff;
+    --surface-2: #fbfcfd;
+    --ink: #1f2933;
+    --ink-2: #3e4c59;
+    --muted: #64748b;
+    --faint: #94a3b8;
+    --accent: #3b6ea5;
+    --accent-ink: #2c557f;
+    --accent-weak: #eaf0f7;
+    --border: #e5e8ec;
+    --border-strong: #d6dbe1;
+    --ok: #2f8f6b;
+    --warn: #b06f3a;
+    --shadow-sm: 0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.05);
+    --shadow-md: 0 2px 10px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.05);
+    --radius: 12px;
+    --radius-sm: 8px;
+    --font-sans: "Segoe UI", "Yu Gothic UI", "Hiragino Kaku Gothic ProN", Meiryo, system-ui, sans-serif;
+    --font-mono: "SFMono-Regular", "Cascadia Mono", Consolas, "Yu Gothic UI", ui-monospace, monospace;
   }
   * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
   body {
     margin: 0; background: var(--bg); color: var(--ink);
-    font-family: "Segoe UI", "Yu Gothic UI", "Hiragino Sans", Meiryo, system-ui, sans-serif;
-    line-height: 1.5;
+    font-family: var(--font-sans); line-height: 1.55;
+    -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
   }
-  header {
-    background: linear-gradient(135deg, #34568b, #4C78A8); color: #fff;
-    padding: 22px 28px;
+
+  /* ---- Header ---- */
+  .app-header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
   }
-  header h1 { margin: 0; font-size: 20px; font-weight: 600; }
-  header .meta { font-size: 13px; opacity: .9; margin-top: 4px; }
-  header .target { font-size: 13px; opacity: .95; margin-top: 6px; word-break: break-all; }
-  main { max-width: 1240px; margin: 0 auto; padding: 22px; }
-  h2 { font-size: 16px; margin: 28px 0 12px; padding-left: 10px; border-left: 4px solid var(--accent); }
-  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; }
+  .app-header__inner {
+    max-width: 1180px; margin: 0 auto; padding: 22px 28px 18px;
+    display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 14px;
+  }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand__mark {
+    width: 34px; height: 34px; border-radius: 9px; flex: none;
+    background: linear-gradient(160deg, var(--accent), var(--accent-ink));
+    position: relative;
+  }
+  .brand__mark::before, .brand__mark::after {
+    content: ""; position: absolute; left: 8px; right: 8px; height: 3px; border-radius: 2px;
+    background: rgba(255,255,255,.85);
+  }
+  .brand__mark::before { top: 11px; right: 14px; }
+  .brand__mark::after { top: 19px; right: 10px; background: rgba(255,255,255,.55); }
+  .brand__name { font-size: 18px; font-weight: 650; letter-spacing: .2px; }
+  .brand__sub { font-size: 12px; color: var(--muted); margin-top: 1px; }
+  .header-meta { display: flex; flex-wrap: wrap; gap: 18px; align-items: flex-end; }
+  .header-meta dl { margin: 0; }
+  .header-meta dt { font-size: 11px; color: var(--faint); letter-spacing: .04em; }
+  .header-meta dd {
+    margin: 1px 0 0; font-size: 13px; color: var(--ink-2);
+    font-family: var(--font-mono); max-width: 460px; word-break: break-all;
+  }
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11px; color: var(--accent-ink); background: var(--accent-weak);
+    border: 1px solid #d8e3f0; border-radius: 999px; padding: 3px 10px; white-space: nowrap;
+  }
+  .badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--ok); }
+
+  /* ---- Section nav (sticky) ---- */
+  .section-nav {
+    position: sticky; top: 0; z-index: 20;
+    background: rgba(255,255,255,.86); backdrop-filter: saturate(140%) blur(8px);
+    border-bottom: 1px solid var(--border);
+  }
+  .section-nav__inner {
+    max-width: 1180px; margin: 0 auto; padding: 0 20px;
+    display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin;
+  }
+  .section-nav a {
+    flex: none; padding: 13px 14px; font-size: 13px; color: var(--muted);
+    text-decoration: none; border-bottom: 2px solid transparent; white-space: nowrap;
+    transition: color .15s ease, border-color .15s ease;
+  }
+  .section-nav a:hover { color: var(--ink); }
+  .section-nav a.is-active { color: var(--accent-ink); border-bottom-color: var(--accent); font-weight: 600; }
+  .section-nav a:focus-visible, .tab:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; color: var(--ink);
+  }
+
+  main { max-width: 1180px; margin: 0 auto; padding: 26px 20px 40px; }
+
+  /* ---- Section headings ---- */
+  .section { padding-top: 10px; margin-top: 14px; scroll-margin-top: 60px; }
+  .section__head { display: flex; align-items: baseline; gap: 12px; margin: 18px 0 14px; }
+  .section__head h2 { font-size: 17px; font-weight: 650; margin: 0; letter-spacing: .2px; }
+  .section__head .hint { font-size: 12px; color: var(--muted); }
+
+  /* ---- KPI ---- */
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
   .kpi {
-    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
-    padding: 16px; box-shadow: var(--shadow);
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px 16px 15px; box-shadow: var(--shadow-sm); position: relative; overflow: hidden;
   }
-  .kpi .label { font-size: 12px; color: var(--muted); }
-  .kpi .value { font-size: 22px; font-weight: 700; margin-top: 6px; word-break: break-all; }
-  .kpi .sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .kpi::before {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--accent); opacity: .85;
+  }
+  .kpi__label { font-size: 12px; color: var(--muted); }
+  .kpi__value { font-size: 26px; font-weight: 680; margin-top: 7px; letter-spacing: -.01em;
+    font-variant-numeric: tabular-nums; word-break: break-word; }
+  .kpi__sub { font-size: 11px; color: var(--faint); margin-top: 3px; font-family: var(--font-mono); }
+
+  /* ---- Cards & grids ---- */
   .card {
-    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
-    padding: 12px; box-shadow: var(--shadow); margin-bottom: 18px; overflow: hidden;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: var(--shadow-sm); margin-bottom: 16px; overflow: hidden;
   }
-  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
-  @media (max-width: 920px) { .grid-2 { grid-template-columns: 1fr; } }
+  .card__head {
+    padding: 13px 16px 0; font-size: 13px; font-weight: 600; color: var(--ink-2);
+  }
+  .card__body { padding: 8px 10px 10px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+
+  /* ---- Tables ---- */
+  .table-wrap { width: 100%; overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   thead th {
-    position: sticky; top: 0; background: #eef2f7; text-align: left;
-    padding: 8px 10px; border-bottom: 2px solid var(--border); white-space: nowrap;
+    position: sticky; top: 0; background: var(--surface-2); text-align: left; color: var(--muted);
+    font-weight: 600; font-size: 12px; padding: 9px 12px; border-bottom: 1px solid var(--border-strong);
+    white-space: nowrap;
   }
-  tbody td { padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
-  tbody tr:nth-child(even) { background: #fafbfc; }
-  .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .path { color: var(--muted); font-size: 12px; word-break: break-all; max-width: 520px; }
+  tbody td { padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: #f6f8fb; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; font-family: var(--font-mono); }
+  .rank { color: var(--faint); font-family: var(--font-mono); width: 1%; }
+  .path {
+    color: var(--muted); font-size: 12px; font-family: var(--font-mono);
+    max-width: 420px; word-break: break-all;
+  }
+  .fname { font-weight: 500; }
   .pill {
-    display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px;
-    background: #eaf0f6; color: #34568b; border: 1px solid #d6e0ec;
+    display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px;
+    background: var(--accent-weak); color: var(--accent-ink); border: 1px solid #dbe5f1; white-space: nowrap;
   }
-  .scroll { max-height: 460px; overflow: auto; }
-  .note { font-size: 12px; color: var(--muted); margin: 4px 0 10px; }
-  .empty { color: var(--muted); font-size: 13px; padding: 14px; }
-  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 26px; }
+  .scroll { max-height: 480px; overflow: auto; }
+  .meter { display: block; height: 4px; margin-top: 5px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .meter > i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+
+  .note { font-size: 12px; color: var(--muted); margin: 2px 0 10px; }
+  .empty { color: var(--muted); font-size: 13px; padding: 22px 14px; text-align: center; }
+
+  /* ---- Deep Dive tabs ---- */
+  .tabs {
+    display: flex; gap: 4px; overflow-x: auto; scrollbar-width: thin;
+    border-bottom: 1px solid var(--border); margin-bottom: 16px; padding-bottom: 0;
+  }
+  .tab {
+    flex: none; appearance: none; cursor: pointer; background: transparent; border: none;
+    border-bottom: 2px solid transparent; color: var(--muted); font: inherit; font-size: 13px;
+    padding: 9px 14px; white-space: nowrap; transition: color .15s ease, border-color .15s ease;
+  }
+  .tab:hover { color: var(--ink); }
+  .tab.is-active { color: var(--accent-ink); border-bottom-color: var(--accent); font-weight: 600; }
+  .tab .tab__sz { color: var(--faint); font-family: var(--font-mono); font-size: 11px; margin-left: 7px; font-weight: 400; }
+  .tabpanel { display: none; }
+  .tabpanel.is-active { display: block; animation: fade .2s ease; }
+
+  .dd-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 14px; }
+  .dd-stat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px; box-shadow: var(--shadow-sm); }
+  .dd-stat .l { font-size: 11px; color: var(--muted); }
+  .dd-stat .v { font-size: 19px; font-weight: 650; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .dd-path {
+    font-family: var(--font-mono); font-size: 12px; color: var(--muted);
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 8px 12px; margin-bottom: 14px; word-break: break-all;
+  }
+
+  footer {
+    max-width: 1180px; margin: 0 auto; padding: 26px 20px 36px; color: var(--faint); font-size: 12px;
+    border-top: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between;
+  }
+
+  @keyframes fade { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+  @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: no-preference) {
+    .kpi { animation: rise .4s ease both; }
+    .kpi:nth-child(2) { animation-delay: .04s; }
+    .kpi:nth-child(3) { animation-delay: .08s; }
+    .kpi:nth-child(4) { animation-delay: .12s; }
+    .kpi:nth-child(5) { animation-delay: .16s; }
+  }
+
+  @media print {
+    html { scroll-behavior: auto; }
+    body { background: #fff; }
+    .section-nav { position: static; backdrop-filter: none; }
+    .card, .kpi, .dd-stat { box-shadow: none; }
+    .tabpanel { display: block !important; }
+    .tabs { display: none; }
+  }
 </style>
 </head>
 <body>
-<header>
-  <h1>📊 StorageAnalyzer レポート</h1>
-  <div class="meta">作成日時: {{ kpi.generated_at }} ・ 読み取り専用の診断結果（削除は行いません）</div>
-  <div class="target">スキャン対象: {{ kpi.scan_target }}</div>
+
+<header class="app-header">
+  <div class="app-header__inner">
+    <div class="brand">
+      <div class="brand__mark" aria-hidden="true"></div>
+      <div>
+        <div class="brand__name">StorageAnalyzer</div>
+        <div class="brand__sub">ストレージ使用量レポート</div>
+      </div>
+    </div>
+    <div class="header-meta">
+      <dl><dt>対象</dt><dd>{{ kpi.scan_target }}</dd></dl>
+      <dl><dt>生成日時</dt><dd>{{ kpi.generated_at }}</dd></dl>
+      <dl><dt>実行時間</dt><dd>{{ kpi.elapsed }}</dd></dl>
+      <span class="badge">読み取り専用</span>
+    </div>
+  </div>
 </header>
+
+<nav class="section-nav">
+  <div class="section-nav__inner">
+    <a href="#overview">概要</a>
+    <a href="#structure">構造</a>
+    <a href="#deepdive">深掘り</a>
+    <a href="#files">巨大ファイル</a>
+    <a href="#logs">ログ</a>
+  </div>
+</nav>
 
 <main>
   <!-- KPI -->
-  <section class="kpis">
-    <div class="kpi"><div class="label">合計容量</div><div class="value">{{ kpi.total_size }}</div><div class="sub">{{ kpi.total_bytes }} bytes</div></div>
-    <div class="kpi"><div class="label">ファイル数</div><div class="value">{{ kpi.file_count }}</div></div>
-    <div class="kpi"><div class="label">フォルダ数</div><div class="value">{{ kpi.folder_count }}</div></div>
-    <div class="kpi"><div class="label">スキップ件数</div><div class="value">{{ kpi.skip_count }}</div><div class="sub">権限エラー等</div></div>
-    <div class="kpi"><div class="label">実行時間</div><div class="value">{{ kpi.elapsed }}</div></div>
-    <div class="kpi"><div class="label">スキャン対象</div><div class="value" style="font-size:14px">{{ kpi.scan_target }}</div></div>
+  <section class="kpis" aria-label="サマリー">
+    <div class="kpi"><div class="kpi__label">合計容量</div><div class="kpi__value">{{ kpi.total_size }}</div><div class="kpi__sub">{{ kpi.total_bytes }} bytes</div></div>
+    <div class="kpi"><div class="kpi__label">ファイル数</div><div class="kpi__value">{{ kpi.file_count }}</div></div>
+    <div class="kpi"><div class="kpi__label">フォルダ数</div><div class="kpi__value">{{ kpi.folder_count }}</div></div>
+    <div class="kpi"><div class="kpi__label">スキップ件数</div><div class="kpi__value">{{ kpi.skip_count }}</div><div class="kpi__sub">権限エラー等</div></div>
+    <div class="kpi"><div class="kpi__label">実行時間</div><div class="kpi__value">{{ kpi.elapsed }}</div></div>
   </section>
 
-  <!-- Charts -->
-  <h2>容量の内訳</h2>
-  <div class="grid-2">
-    <div class="card">{{ charts.folder_bar | safe }}</div>
-    <div class="card">{{ charts.extension_bar | safe }}</div>
-  </div>
-  <div class="grid-2">
-    <div class="card">{{ charts.category | safe }}</div>
-    <div class="card">{{ charts.month_bar | safe }}</div>
-  </div>
-
-  <h2>フォルダ階層ツリーマップ</h2>
-  <div class="card">{{ charts.treemap | safe }}</div>
-
-  <h2>容量フロー（サンキー図）</h2>
-  <div class="card">{{ charts.sankey | safe }}</div>
-
-  <!-- Category table -->
-  <h2>カテゴリ別容量</h2>
-  <div class="card scroll">
-    {% if categories %}
-    <table>
-      <thead><tr><th>カテゴリ</th><th class="num">容量</th><th class="num">割合</th><th class="num">MB</th></tr></thead>
-      <tbody>
-      {% for r in categories %}
-        <tr><td><span class="pill">{{ r.category }}</span></td><td class="num">{{ r.size_human }}</td><td class="num">{{ "%.2f"|format(r.pct) }} %</td><td class="num">{{ "{:,.1f}".format(r.size_mb) }}</td></tr>
-      {% endfor %}
-      </tbody>
-    </table>
-    {% else %}<div class="empty">データなし</div>{% endif %}
-  </div>
-
-  <!-- Top files -->
-  <h2>巨大ファイル Top {{ top_n_files }}</h2>
-  <div class="card scroll">
-    {% if top_files %}
-    <table>
-      <thead><tr><th>#</th><th>ファイル名</th><th class="num">サイズ</th><th>カテゴリ</th><th>更新日時</th><th>パス</th></tr></thead>
-      <tbody>
-      {% for r in top_files %}
-        <tr><td class="num">{{ loop.index }}</td><td>{{ r.name }}</td><td class="num">{{ r.size_human }}</td><td><span class="pill">{{ r.category }}</span></td><td class="num">{{ r.modified_at }}</td><td class="path">{{ r.path }}</td></tr>
-      {% endfor %}
-      </tbody>
-    </table>
-    {% else %}<div class="empty">データなし</div>{% endif %}
-  </div>
-
-  <!-- Old / Recent large -->
-  <div class="grid-2">
-    <div>
-      <h2>古い巨大ファイル（{{ old_threshold_days }}日以上前に更新）</h2>
-      <div class="card scroll">
-        {% if old_large %}
+  <!-- Overview -->
+  <section id="overview" class="section">
+    <div class="section__head"><h2>概要</h2><span class="hint">容量の内訳を俯瞰します</span></div>
+    <div class="grid-2">
+      <div class="card"><div class="card__head">フォルダ別容量（子孫含む・上位）</div><div class="card__body">{{ charts.folder_bar | safe }}</div></div>
+      <div class="card"><div class="card__head">拡張子別容量（上位）</div><div class="card__body">{{ charts.extension_bar | safe }}</div></div>
+    </div>
+    <div class="grid-2">
+      <div class="card"><div class="card__head">カテゴリ別容量</div><div class="card__body">{{ charts.category | safe }}</div></div>
+      <div class="card"><div class="card__head">更新年月別容量</div><div class="card__body">{{ charts.month_bar | safe }}</div></div>
+    </div>
+    <div class="card">
+      <div class="card__head">カテゴリ別 内訳</div>
+      <div class="card__body table-wrap scroll">
+        {% if categories %}
         <table>
-          <thead><tr><th>ファイル名</th><th class="num">サイズ</th><th>更新日時</th></tr></thead>
+          <thead><tr><th>カテゴリ</th><th class="num">容量</th><th class="num">割合</th><th class="num">MB</th></tr></thead>
           <tbody>
-          {% for r in old_large %}
-            <tr><td>{{ r.name }}<div class="path">{{ r.path }}</div></td><td class="num">{{ r.size_human }}</td><td class="num">{{ r.modified_at }}</td></tr>
+          {% for r in categories %}
+            <tr>
+              <td><span class="pill">{{ r.category }}</span></td>
+              <td class="num">{{ r.size_human }}</td>
+              <td class="num">{{ "%.2f"|format(r.pct) }} %<span class="meter"><i style="width:{{ [r.pct, 100]|min }}%"></i></span></td>
+              <td class="num">{{ "{:,.1f}".format(r.size_mb) }}</td>
+            </tr>
           {% endfor %}
           </tbody>
         </table>
-        {% else %}<div class="empty">該当なし</div>{% endif %}
+        {% else %}<div class="empty">データなし</div>{% endif %}
       </div>
     </div>
-    <div>
-      <h2>最近更新された巨大ファイル（{{ recent_threshold_days }}日以内）</h2>
-      <div class="card scroll">
-        {% if recent_large %}
+  </section>
+
+  <!-- Structure -->
+  <section id="structure" class="section">
+    <div class="section__head"><h2>構造</h2><span class="hint">フォルダ階層と容量フロー</span></div>
+    <div class="card"><div class="card__head">フォルダ階層ツリーマップ（子孫含む・クリックでドリルダウン）</div><div class="card__body">{{ charts.treemap | safe }}</div></div>
+    <div class="card"><div class="card__head">フォルダ階層アイシクル（左→右に深い階層・クリックでドリルダウン）</div><div class="card__body">{{ charts.icicle | safe }}</div></div>
+    <div class="card"><div class="card__head">容量フロー（対象 → 第1階層 → 第2階層 → カテゴリ）</div><div class="card__body">{{ charts.sankey | safe }}</div></div>
+  </section>
+
+  <!-- Deep Dive -->
+  <section id="deepdive" class="section">
+    <div class="section__head"><h2>深掘り</h2><span class="hint">第2階層までの容量 Top{{ deep_dives|length }} を、配下までさらに分解</span></div>
+    {% if deep_dives %}
+    <div class="tabs" role="tablist">
+      {% for dd in deep_dives %}
+        <button class="tab {% if loop.first %}is-active{% endif %}" role="tab" data-tab="dd-{{ loop.index0 }}">{{ dd.label }}<span class="tab__sz">{{ dd.total_human }}</span></button>
+      {% endfor %}
+    </div>
+    {% for dd in deep_dives %}
+    <div class="tabpanel {% if loop.first %}is-active{% endif %}" id="dd-{{ loop.index0 }}" role="tabpanel">
+      <div class="dd-path">{{ dd.full_path }}</div>
+      <div class="dd-stats">
+        <div class="dd-stat"><div class="l">合計容量</div><div class="v">{{ dd.total_human }}</div></div>
+        <div class="dd-stat"><div class="l">全体に対する割合</div><div class="v">{{ "%.2f"|format(dd.pct) }} %</div></div>
+        <div class="dd-stat"><div class="l">ファイル数</div><div class="v">{{ "{:,}".format(dd.file_count) }}</div></div>
+        <div class="dd-stat"><div class="l">フォルダ数</div><div class="v">{{ "{:,}".format(dd.folder_count) }}</div></div>
+      </div>
+
+      <div class="card"><div class="card__head">配下ツリーマップ</div><div class="card__body">{{ charts.get('deep_treemap_' ~ loop.index0, '') | safe }}</div></div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card__head">フォルダ別容量（配下 {{ dd.folders|length }} 件）</div>
+          <div class="card__body table-wrap scroll">
+            {% if dd.folders %}
+            <table>
+              <thead><tr><th>フォルダ</th><th class="num">容量</th><th class="num">Top内</th></tr></thead>
+              <tbody>
+              {% for r in dd.folders %}
+                <tr>
+                  <td class="fname" title="{{ r.path }}">{{ r.folder }}</td>
+                  <td class="num">{{ r.size_human }}</td>
+                  <td class="num">{{ "%.1f"|format(r.pct) }} %</td>
+                </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+            {% else %}<div class="empty">配下フォルダなし</div>{% endif %}
+          </div>
+        </div>
+        <div class="card">
+          <div class="card__head">拡張子別容量</div>
+          <div class="card__body table-wrap scroll">
+            {% if dd.extensions %}
+            <table>
+              <thead><tr><th>拡張子</th><th class="num">容量</th><th class="num">Top内</th></tr></thead>
+              <tbody>
+              {% for r in dd.extensions %}
+                <tr><td class="fname">{{ r.extension }}</td><td class="num">{{ r.size_human }}</td><td class="num">{{ "%.1f"|format(r.pct) }} %</td></tr>
+              {% endfor %}
+              </tbody>
+            </table>
+            {% else %}<div class="empty">データなし</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card__head">カテゴリ別容量</div>
+          <div class="card__body table-wrap scroll">
+            {% if dd.categories %}
+            <table>
+              <thead><tr><th>カテゴリ</th><th class="num">容量</th><th class="num">Top内</th></tr></thead>
+              <tbody>
+              {% for r in dd.categories %}
+                <tr><td><span class="pill">{{ r.category }}</span></td><td class="num">{{ r.size_human }}</td><td class="num">{{ "%.1f"|format(r.pct) }} %</td></tr>
+              {% endfor %}
+              </tbody>
+            </table>
+            {% else %}<div class="empty">データなし</div>{% endif %}
+          </div>
+        </div>
+        <div class="card">
+          <div class="card__head">巨大ファイル（配下 Top{{ dd.top_files|length }}）</div>
+          <div class="card__body table-wrap scroll">
+            {% if dd.top_files %}
+            <table>
+              <thead><tr><th class="rank">#</th><th>ファイル名</th><th class="num">サイズ</th><th>パス</th></tr></thead>
+              <tbody>
+              {% for r in dd.top_files %}
+                <tr><td class="rank">{{ loop.index }}</td><td class="fname">{{ r.name }}</td><td class="num">{{ r.size_human }}</td><td class="path" title="{{ r.path }}">{{ r.path }}</td></tr>
+              {% endfor %}
+              </tbody>
+            </table>
+            {% else %}<div class="empty">データなし</div>{% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="card"><div class="empty">深掘り対象がありません（対象が浅いか、データが空です）</div></div>
+    {% endif %}
+  </section>
+
+  <!-- Files -->
+  <section id="files" class="section">
+    <div class="section__head"><h2>巨大ファイル</h2><span class="hint">容量の大きいファイルと、古い／最近のもの</span></div>
+    <div class="card">
+      <div class="card__head">巨大ファイル Top {{ top_n_files }}</div>
+      <div class="card__body table-wrap scroll">
+        {% if top_files %}
         <table>
-          <thead><tr><th>ファイル名</th><th class="num">サイズ</th><th>更新日時</th></tr></thead>
+          <thead><tr><th class="rank">#</th><th>ファイル名</th><th class="num">サイズ</th><th>カテゴリ</th><th>更新日時</th><th>パス</th></tr></thead>
           <tbody>
-          {% for r in recent_large %}
-            <tr><td>{{ r.name }}<div class="path">{{ r.path }}</div></td><td class="num">{{ r.size_human }}</td><td class="num">{{ r.modified_at }}</td></tr>
+          {% for r in top_files %}
+            <tr>
+              <td class="rank">{{ loop.index }}</td>
+              <td class="fname">{{ r.name }}</td>
+              <td class="num">{{ r.size_human }}</td>
+              <td><span class="pill">{{ r.category }}</span></td>
+              <td class="num">{{ r.modified_at }}</td>
+              <td class="path" title="{{ r.path | cleanpath }}">{{ r.path | cleanpath }}</td>
+            </tr>
           {% endfor %}
           </tbody>
         </table>
-        {% else %}<div class="empty">該当なし</div>{% endif %}
+        {% else %}<div class="empty">データなし</div>{% endif %}
       </div>
     </div>
-  </div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card__head">古い巨大ファイル（{{ old_threshold_days }}日以上前に更新）</div>
+        <div class="card__body table-wrap scroll">
+          {% if old_large %}
+          <table>
+            <thead><tr><th>ファイル名</th><th class="num">サイズ</th><th>更新日時</th></tr></thead>
+            <tbody>
+            {% for r in old_large %}
+              <tr><td class="fname">{{ r.name }}<div class="path" title="{{ r.path | cleanpath }}">{{ r.path | cleanpath }}</div></td><td class="num">{{ r.size_human }}</td><td class="num">{{ r.modified_at }}</td></tr>
+            {% endfor %}
+            </tbody>
+          </table>
+          {% else %}<div class="empty">該当なし</div>{% endif %}
+        </div>
+      </div>
+      <div class="card">
+        <div class="card__head">最近更新された巨大ファイル（{{ recent_threshold_days }}日以内）</div>
+        <div class="card__body table-wrap scroll">
+          {% if recent_large %}
+          <table>
+            <thead><tr><th>ファイル名</th><th class="num">サイズ</th><th>更新日時</th></tr></thead>
+            <tbody>
+            {% for r in recent_large %}
+              <tr><td class="fname">{{ r.name }}<div class="path" title="{{ r.path | cleanpath }}">{{ r.path | cleanpath }}</div></td><td class="num">{{ r.size_human }}</td><td class="num">{{ r.modified_at }}</td></tr>
+            {% endfor %}
+            </tbody>
+          </table>
+          {% else %}<div class="empty">該当なし</div>{% endif %}
+        </div>
+      </div>
+    </div>
+  </section>
 
-  <!-- Skips -->
-  <h2>スキップ / エラーログ</h2>
-  <div class="note">スキップ合計 {{ "{:,}".format(skip_total) }} 件{% if skips|length < skip_total %}（表は先頭 {{ skips|length }} 件。全件は storage_errors_*.csv を参照）{% endif %}</div>
-  <div class="card scroll">
-    {% if skips %}
-    <table>
-      <thead><tr><th>エラー種別</th><th>メッセージ</th><th>パス</th></tr></thead>
-      <tbody>
-      {% for r in skips %}
-        <tr><td><span class="pill">{{ r.error_type }}</span></td><td>{{ r.error_message }}</td><td class="path">{{ r.path }}</td></tr>
-      {% endfor %}
-      </tbody>
-    </table>
-    {% else %}<div class="empty">スキップはありませんでした 🎉</div>{% endif %}
-  </div>
+  <!-- Logs -->
+  <section id="logs" class="section">
+    <div class="section__head"><h2>ログ</h2><span class="hint">アクセスできずスキップした項目</span></div>
+    <div class="note">スキップ合計 {{ "{:,}".format(skip_total) }} 件{% if skips|length < skip_total %}（表は先頭 {{ skips|length }} 件。全件は errors.csv を参照）{% endif %}</div>
+    <div class="card">
+      <div class="card__body table-wrap scroll">
+        {% if skips %}
+        <table>
+          <thead><tr><th>エラー種別</th><th>メッセージ</th><th>パス</th></tr></thead>
+          <tbody>
+          {% for r in skips %}
+            <tr><td><span class="pill">{{ r.error_type }}</span></td><td>{{ r.error_message }}</td><td class="path" title="{{ r.path | cleanpath }}">{{ r.path | cleanpath }}</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        {% else %}<div class="empty">スキップはありませんでした</div>{% endif %}
+      </div>
+    </div>
+  </section>
 </main>
 
 <footer>
-  StorageAnalyzer v0.1 ・ 読み取り専用 ・ このレポートは単体で閲覧できます
+  <span>StorageAnalyzer v{{ app_version }} ・ 読み取り専用ツール（削除・移動は行いません）</span>
+  <span>生成: {{ kpi.generated_at }} ・ このレポートは単体で閲覧できます</span>
 </footer>
+
+<script>
+(function () {
+  "use strict";
+
+  function resizePlots(el) {
+    if (!window.Plotly || !el) return;
+    el.querySelectorAll(".plotly-graph-div").forEach(function (d) {
+      try { window.Plotly.Plots.resize(d); } catch (e) {}
+    });
+  }
+
+  // Deep Dive tabs
+  document.querySelectorAll(".tabs").forEach(function (group) {
+    var buttons = Array.prototype.slice.call(group.querySelectorAll(".tab"));
+    group.addEventListener("click", function (ev) {
+      var btn = ev.target.closest(".tab");
+      if (!btn) return;
+      var id = btn.getAttribute("data-tab");
+      buttons.forEach(function (b) { b.classList.toggle("is-active", b === btn); });
+      document.querySelectorAll(".tabpanel").forEach(function (p) {
+        var active = p.id === id;
+        p.classList.toggle("is-active", active);
+        if (active) resizePlots(p);
+      });
+    });
+  });
+
+  // Scrollspy for the sticky section nav
+  try {
+    var links = {};
+    document.querySelectorAll(".section-nav a").forEach(function (a) {
+      links[a.getAttribute("href").slice(1)] = a;
+    });
+    var obs = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting && links[e.target.id]) {
+          Object.values(links).forEach(function (a) { a.classList.remove("is-active"); });
+          links[e.target.id].classList.add("is-active");
+        }
+      });
+    }, { rootMargin: "-45% 0px -50% 0px", threshold: 0 });
+    document.querySelectorAll("main section[id]").forEach(function (s) { obs.observe(s); });
+  } catch (e) {}
+})();
+</script>
 </body>
 </html>
