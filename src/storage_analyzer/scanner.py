@@ -250,6 +250,26 @@ class Scanner:
             self.config.max_reparse_records_in_report,
         )
 
+    def _stat_countable_file(
+        self, entry: "os.DirEntry[str]", follow: bool, *, record: bool
+    ) -> Optional[os.stat_result]:
+        """通常ファイルとして集計してよい場合だけ stat 結果を返す。
+
+        symlink / junction / 種別不明 reparse file は容量集計に混ぜない。
+        OneDrive cloud file は本文を開かず stat のメタデータだけでサイズを計上する。
+        """
+        st = entry.stat(follow_symlinks=follow)
+        info = classify_reparse_point(st, entry)
+        if not info.is_reparse:
+            return st
+
+        if record:
+            self._record_reparse_file(entry.path, info)
+
+        if info.kind == "onedrive_cloud":
+            return st
+        return None
+
     # ------------------------------------------------------------------ #
     # 事前カウント（軽量・stat を呼ばない）
     # ------------------------------------------------------------------ #
@@ -276,9 +296,10 @@ class Scanner:
                                 if self._should_descend(entry, follow, record=False):
                                     stack.append(entry.path)
                             else:
-                                count += 1
-                                if progress is not None:
-                                    progress()
+                                if self._stat_countable_file(entry, follow, record=False) is not None:
+                                    count += 1
+                                    if progress is not None:
+                                        progress()
                         except OSError:
                             continue
             except OSError:
@@ -328,9 +349,10 @@ class Scanner:
                 stack.append((entry.path, depth))
             return None
 
-        # ファイル（symlink ファイルは follow=False の場合リンク自身を stat する）
-        st = entry.stat(follow_symlinks=follow)
-        self._record_reparse_file(entry.path, classify_reparse_point(st, entry))
+        # ファイル（follow=False の reparse file / symlink file は通常ファイルとして数えない）
+        st = self._stat_countable_file(entry, follow, record=True)
+        if st is None:
+            return None
         size = int(st.st_size)
         name = entry.name
         ext = os.path.splitext(name)[1].lower()

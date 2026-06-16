@@ -31,7 +31,7 @@ IO_REPARSE_TAG_CLOUD_2 = 0x9000201A
 class ReparseInfo:
     """reparse point の安全な分類結果。
 
-    ``kind`` は ``normal`` / ``symlink`` / ``junction`` / ``onedrive_cloud`` /
+    ``kind`` は ``not_reparse`` / ``symlink`` / ``junction`` / ``onedrive_cloud`` /
     ``other_reparse`` / ``unknown_reparse`` のいずれかを想定する。
     """
 
@@ -135,18 +135,29 @@ def classify_reparse_point(st: os.stat_result, entry: "os.DirEntry[str]") -> Rep
     symlink 判定だけにフォールバックし、Cloud / junction と誤判定しない。
     """
     path = getattr(entry, "path", "")
-    tag = getattr(st, "st_reparse_tag", None)
-    tag_hex = f"0x{int(tag):08x}" if tag is not None else None
+    raw_tag = getattr(st, "st_reparse_tag", None)
+    tag = int(raw_tag or 0)
+    tag_hex = f"0x{tag:08x}" if tag else None
     try:
         is_link = entry.is_symlink()
     except OSError:
         is_link = False
 
-    attrs = getattr(st, "st_file_attributes", None)
-    attr_reparse = bool(attrs & _FILE_ATTRIBUTE_REPARSE_POINT) if attrs is not None else False
-    is_reparse = attr_reparse or is_link or tag is not None
-    cloud_tag = is_cloud_reparse_tag(int(tag)) if tag is not None else False
+    raw_attrs = getattr(st, "st_file_attributes", None)
+    attrs = int(raw_attrs or 0)
+    attr_reparse = bool(attrs & _FILE_ATTRIBUTE_REPARSE_POINT)
+
+    # Windows の通常ディレクトリにも st_reparse_tag=0 が現れることがある。
+    # FILE_ATTRIBUTE_REPARSE_POINT が立っていない場合は、tag 属性の有無や tag=0 を
+    # reparse point の根拠にせず、明確に通常エントリとして扱う。
+    if not is_link and raw_attrs is not None and not attr_reparse:
+        return ReparseInfo(kind="not_reparse", is_reparse=False)
+    if not is_link and raw_attrs is None and tag == 0:
+        return ReparseInfo(kind="not_reparse", is_reparse=False)
+
+    cloud_tag = is_cloud_reparse_tag(tag)
     onedrive_path = is_under_onedrive_root(path) or has_onedrive_path_component(path)
+    is_reparse = attr_reparse or is_link or tag != 0
 
     if is_link or tag == IO_REPARSE_TAG_SYMLINK:
         kind = "symlink"
@@ -157,17 +168,17 @@ def classify_reparse_point(st: os.stat_result, entry: "os.DirEntry[str]") -> Rep
         kind = "onedrive_cloud"
     elif cloud_tag:
         kind = "other_reparse"
-    elif is_reparse and tag is None:
+    elif is_reparse and tag == 0:
         kind = "unknown_reparse"
     elif is_reparse:
         kind = "other_reparse"
     else:
-        kind = "normal"
+        kind = "not_reparse"
 
     return ReparseInfo(
         kind=kind,
         is_reparse=is_reparse,
-        tag=int(tag) if tag is not None else None,
+        tag=tag if tag else None,
         tag_hex=tag_hex,
         is_cloud_tag=cloud_tag,
         is_onedrive_path=onedrive_path,
