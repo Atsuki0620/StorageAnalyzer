@@ -103,3 +103,29 @@ def test_cloud_reparse_file_is_recorded_as_metadata_only() -> None:
     summary = scanner.stats.reparse_summary()
     assert summary["onedrive_cloud_file_detected"] == 1
     assert summary["records"][0]["action"] == "file_metadata"
+
+
+def test_windows_normal_directory_attrs_with_zero_tag_descends() -> None:
+    scanner = make_scanner()
+    for attrs in (16, 17, 19):
+        assert scanner._should_descend(FakeDirEntry(rf"C:/Users/normal-{attrs}", attrs=attrs, tag=0), False)
+
+
+def test_c_users_like_tree_descends_into_normal_directories(tmp_path) -> None:
+    root = tmp_path / "root"
+    user1 = root / "user1"
+    public = root / "Public"
+    user1.mkdir(parents=True)
+    public.mkdir()
+    (user1 / "a.txt").write_text("a", encoding="utf-8")
+    (public / "b.txt").write_text("b", encoding="utf-8")
+    (root / "desktop.ini").write_text("ini", encoding="utf-8")
+
+    scanner = make_scanner()
+    precount = scanner.count_files(str(root))
+    records = list(scanner.iter_records(str(root)))
+
+    assert precount == 3
+    assert {record.name for record in records} == {"a.txt", "b.txt", "desktop.ini"}
+    assert scanner.stats.file_count == 3
+    assert scanner.stats.folder_count >= 2

@@ -24,7 +24,7 @@ def stat(**kwargs):
 
 def test_normal_when_windows_attributes_are_missing() -> None:
     info = classify_reparse_point(stat(), FakeEntry("/tmp/normal"))
-    assert info.kind == "normal"
+    assert info.kind == "not_reparse"
     assert not info.is_reparse
 
 
@@ -82,3 +82,20 @@ def test_unknown_reparse_tag_is_other_reparse() -> None:
         FakeEntry(r"C:/unknown"),
     )
     assert info.kind == "other_reparse"
+
+
+def test_windows_normal_directory_attrs_with_zero_tag_are_not_reparse() -> None:
+    for attrs in (16, 17, 19):
+        info = classify_reparse_point(
+            stat(st_file_attributes=attrs, st_reparse_tag=0),
+            FakeEntry(r"C:/Users/normal"),
+        )
+        assert info.kind == "not_reparse"
+        assert not info.is_reparse
+        assert info.tag is None
+
+
+def test_missing_windows_attributes_with_zero_tag_is_not_reparse() -> None:
+    info = classify_reparse_point(stat(st_reparse_tag=0), FakeEntry(r"C:/Users/normal"))
+    assert info.kind == "not_reparse"
+    assert not info.is_reparse
