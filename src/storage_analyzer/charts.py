@@ -18,23 +18,24 @@ import plotly.graph_objects as go
 
 from storage_analyzer.aggregator import AggregateResult
 from storage_analyzer.config import Config
+from storage_analyzer.palette import (
+    MONTH_BAR_COLOR,
+    NEUTRAL_COLOR,
+    ROOT_COLOR,
+    get_category_color,
+    get_label_color,
+    hex_to_rgba,
+    make_color_sequence,
+)
 from storage_analyzer.utils import display_path, human_size, path_segments
 
 _GIB = 1024 ** 3
 
-# ニュートラル・スレート配色（落ち着いた SaaS ダッシュボード向け・単色アクセント中心）
-_PRIMARY = "#3b6ea5"   # メインのスレートブルー
-_ACCENT = "#6c8ebf"    # サブ（淡いスレート）
-_TEAL = "#7a9cc6"      # 時系列など
+# 落ち着いた SaaS ダッシュボード向けのベース色。実データの識別色は palette.py で管理する。
 _INK = "#1f2933"
 _MUTED = "#64748b"
 _GRID = "#eef1f5"
 _FONT = '"Segoe UI", "Yu Gothic UI", "Hiragino Sans", Meiryo, system-ui, sans-serif'
-# 円グラフ用の控えめなカテゴリ配色（彩度を抑えた近似色相）
-_PIE_COLORS = ["#3b6ea5", "#6c8ebf", "#9bb3cf", "#c7b28a", "#a8a29e", "#6f8f8a", "#94a3b8", "#b08968"]
-# ツリーマップ/アイシクル用の配色。最も淡い側でも白にならないようにして、
-# 白い区画線（枠線）がどのタイルでも見えるようにする。
-_TREE_COLORSCALE = [[0.0, "#cad9ea"], [0.45, "#7aa3cc"], [1.0, "#234e74"]]
 _TREE_LINE = dict(color="#ffffff", width=1.5)
 
 _PLOTLY_CONFIG = {"responsive": True, "displaylogo": False}
@@ -83,7 +84,7 @@ def _short_label(path: str, keep: int = 2) -> str:
 
 
 def _hbar(full_labels: list[str], short_labels: list[str], sizes: list[int],
-          title: str, color: str) -> go.Figure:
+          title: str, colors: list[str]) -> go.Figure:
     """横棒グラフ。入力は **小さい順**（=描画時に大きいものが上に来る）."""
     if not sizes:
         return _empty_fig("データなし")
@@ -95,7 +96,7 @@ def _hbar(full_labels: list[str], short_labels: list[str], sizes: list[int],
             x=gb,
             y=ypos,
             orientation="h",
-            marker_color=color,
+            marker_color=colors,
             customdata=customdata,
             hovertemplate="%{customdata[0]}<br><b>%{customdata[1]}</b><extra></extra>",
         )
@@ -124,7 +125,7 @@ def fig_folder_bar(df: pd.DataFrame, cfg: Config) -> go.Figure:
     full = [str(x) for x in d["parent"]]
     short = [_short_label(p) for p in full]
     sizes = [int(x) for x in d["size_bytes"]]
-    return _hbar(full, short, sizes, "", _PRIMARY)
+    return _hbar(full, short, sizes, "", make_color_sequence(short))
 
 
 def fig_extension_bar(df: pd.DataFrame, cfg: Config) -> go.Figure:
@@ -133,7 +134,7 @@ def fig_extension_bar(df: pd.DataFrame, cfg: Config) -> go.Figure:
     d = df.iloc[::-1]
     labels = [str(x) for x in d["extension"]]
     sizes = [int(x) for x in d["size_bytes"]]
-    return _hbar(labels, labels, sizes, "", _ACCENT)
+    return _hbar(labels, labels, sizes, "", make_color_sequence(labels))
 
 
 def fig_category(df: pd.DataFrame) -> go.Figure:
@@ -148,7 +149,7 @@ def fig_category(df: pd.DataFrame) -> go.Figure:
             hovertemplate="<b>%{label}</b><br>%{customdata}<br>%{percent}<extra></extra>",
             hole=0.55,
             sort=True,
-            marker=dict(colors=_PIE_COLORS, line=dict(color="#ffffff", width=1)),
+            marker=dict(colors=[get_category_color(str(x)) for x in df["category"]], line=dict(color="#ffffff", width=1)),
         )
     )
     _style(fig, height=420, has_axes=False)
@@ -164,7 +165,7 @@ def fig_month_bar(df: pd.DataFrame) -> go.Figure:
         go.Bar(
             x=[str(m) for m in df["month"]],
             y=gb,
-            marker_color=_TEAL,
+            marker_color=MONTH_BAR_COLOR,
             customdata=[str(x) for x in df["size_human"]],
             hovertemplate="%{x}<br><b>%{customdata}</b><extra></extra>",
         )
@@ -177,7 +178,7 @@ def fig_month_bar(df: pd.DataFrame) -> go.Figure:
 
 def _build_hierarchy(
     folder_direct: dict[str, int], root: str, cfg: Config
-) -> Optional[tuple[list[str], list[str], list[str], list[int], list[str]]]:
+) -> Optional[tuple[list[str], list[str], list[str], list[int], list[str], list[str]]]:
     """フォルダ階層を (ids, labels, parents, values, hover) に組み立てる.
 
     深さ ``treemap_max_depth`` を超えるフォルダはその深さの祖先に畳み込む。各ノードの値は
@@ -223,6 +224,7 @@ def _build_hierarchy(
     parents: list[str] = []
     values: list[int] = []
     hover: list[str] = []
+    colors: list[str] = []
     for path, val in total.items():
         ids.append(path)
         values.append(val)
@@ -231,10 +233,13 @@ def _build_hierarchy(
             clean = display_path(root).rstrip("\\/")
             labels.append(os.path.basename(clean) or clean or display_path(root))
             parents.append("")
+            colors.append(ROOT_COLOR)
         else:
             labels.append(os.path.basename(path) or path)
             parents.append(os.path.dirname(path))
-    return ids, labels, parents, values, hover
+            segs = _rel_segments(path, root)
+            colors.append(get_label_color(segs[0] if segs else os.path.basename(path) or path))
+    return ids, labels, parents, values, hover, colors
 
 
 def fig_treemap(folder_direct: dict[str, int], root: str, cfg: Config) -> go.Figure:
@@ -242,7 +247,7 @@ def fig_treemap(folder_direct: dict[str, int], root: str, cfg: Config) -> go.Fig
     built = _build_hierarchy(folder_direct, root, cfg)
     if built is None:
         return _empty_fig("フォルダデータなし")
-    ids, labels, parents, values, hover = built
+    ids, labels, parents, values, hover, colors = built
 
     fig = go.Figure(
         go.Treemap(
@@ -255,7 +260,7 @@ def fig_treemap(folder_direct: dict[str, int], root: str, cfg: Config) -> go.Fig
             hovertemplate="<b>%{label}</b><br>合計: %{customdata}<br>全体比: %{percentRoot}<extra></extra>",
             maxdepth=4,
             tiling=dict(packing="squarify", pad=3),
-            marker=dict(colorscale=_TREE_COLORSCALE, line=_TREE_LINE),
+            marker=dict(colors=colors, line=_TREE_LINE),
         )
     )
     _style(fig, height=560, has_axes=False)
@@ -271,7 +276,7 @@ def fig_icicle(folder_direct: dict[str, int], root: str, cfg: Config) -> go.Figu
     built = _build_hierarchy(folder_direct, root, cfg)
     if built is None:
         return _empty_fig("フォルダデータなし")
-    ids, labels, parents, values, hover = built
+    ids, labels, parents, values, hover, colors = built
 
     fig = go.Figure(
         go.Icicle(
@@ -284,7 +289,7 @@ def fig_icicle(folder_direct: dict[str, int], root: str, cfg: Config) -> go.Figu
             hovertemplate="<b>%{label}</b><br>合計: %{customdata}<br>全体比: %{percentRoot}<extra></extra>",
             maxdepth=6,
             tiling=dict(orientation="h", pad=2),
-            marker=dict(colorscale=_TREE_COLORSCALE, line=_TREE_LINE),
+            marker=dict(colors=colors, line=_TREE_LINE),
         )
     )
     _style(fig, height=600, has_axes=False)
@@ -332,12 +337,25 @@ def fig_sankey(sankey_agg: dict[tuple[str, str, str], int], root: str, cfg: Conf
         l2_cat[(l1m, l2m, cat)] += v
 
     node_labels: list[str] = []
+    node_colors: list[str] = []
     node_index: dict[tuple, int] = {}
+
+    def color_for_node(key: tuple, display: str) -> str:
+        if key[0] == "ROOT":
+            return ROOT_COLOR
+        if key[0] == "L1":
+            return get_label_color(str(key[1]))
+        if key[0] == "L2":
+            return get_label_color(str(key[1]))
+        if key[0] == "CAT":
+            return get_category_color(display)
+        return NEUTRAL_COLOR
 
     def node(key: tuple, display: str) -> int:
         if key not in node_index:
             node_index[key] = len(node_labels)
             node_labels.append(display)
+            node_colors.append(color_for_node(key, display))
         return node_index[key]
 
     root_display = os.path.basename(root.rstrip("/\\")) or root
@@ -366,15 +384,16 @@ def fig_sankey(sankey_agg: dict[tuple[str, str, str], int], root: str, cfg: Conf
         val.append(v)
 
     customdata = [human_size(v) for v in val]
+    link_colors = [hex_to_rgba(node_colors[source], 0.24) for source in src]
     fig = go.Figure(
         go.Sankey(
-            node=dict(label=node_labels, pad=14, thickness=14, color="#9bb3cf",
+            node=dict(label=node_labels, pad=14, thickness=14, color=node_colors,
                       line=dict(color="#ffffff", width=0.5)),
             link=dict(
                 source=src,
                 target=tgt,
                 value=val,
-                color="rgba(59,110,165,0.18)",
+                color=link_colors,
                 customdata=customdata,
                 hovertemplate="%{source.label} → %{target.label}<br><b>%{customdata}</b><extra></extra>",
             ),

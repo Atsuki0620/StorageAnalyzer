@@ -9,14 +9,81 @@
 from __future__ import annotations
 
 import os
+import re
 import stat
 import sys
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-# Windows のファイル属性定数（Linux の stat には存在しないことがあるため定数で持つ）
+# Windows のファイル属性 / reparse tag 定数（Linux の stat には存在しないため定数で持つ）
 _FILE_ATTRIBUTE_REPARSE_POINT = 0x400
+IO_REPARSE_TAG_MOUNT_POINT = 0xA0000003
+IO_REPARSE_TAG_SYMLINK = 0xA000000C
+# OneDrive Files On-Demand などで使われる Cloud 系タグ。実測値 0x9000701a も範囲判定で捕捉する。
+IO_REPARSE_TAG_CLOUD = 0x9000001A
+IO_REPARSE_TAG_CLOUD_1 = 0x9000101A
+IO_REPARSE_TAG_CLOUD_2 = 0x9000201A
+
+
+@dataclass(frozen=True)
+class ReparseInfo:
+    """reparse point の安全な分類結果。
+
+    ``kind`` は ``normal`` / ``symlink`` / ``junction`` / ``onedrive_cloud`` /
+    ``other_reparse`` / ``unknown_reparse`` のいずれかを想定する。
+    """
+
+    kind: str
+    is_reparse: bool
+    tag: Optional[int] = None
+    tag_hex: Optional[str] = None
+    is_cloud_tag: bool = False
+    is_onedrive_path: bool = False
+
+
+def is_cloud_reparse_tag(tag: Optional[int]) -> bool:
+    """Cloud 系 reparse tag かどうかを判定する。
+
+    OneDrive の実測で見られた ``0x9000701a`` を含め、上位 nibble が ``0x9``、
+    下位 byte が ``0x1a`` のタグを Cloud 系として扱う。
+    """
+    if tag is None:
+        return False
+    return (tag & 0xF0000000) == 0x90000000 and (tag & 0x000000FF) == 0x1A
+
+
+def _onedrive_roots() -> tuple[str, ...]:
+    roots: list[str] = []
+    for name in ("OneDrive", "OneDriveCommercial", "OneDriveConsumer"):
+        value = os.environ.get(name)
+        if value:
+            roots.append(os.path.normcase(os.path.abspath(value)))
+    return tuple(dict.fromkeys(roots))
+
+
+def is_under_onedrive_root(path: str) -> bool:
+    """OneDrive 関連環境変数の配下かどうかを安全に判定する。"""
+    if not path:
+        return False
+    npath = os.path.normcase(os.path.abspath(path))
+    for root in _onedrive_roots():
+        try:
+            if npath == root or os.path.commonpath([npath, root]) == root:
+                return True
+        except ValueError:
+            continue
+    return False
+
+
+def has_onedrive_path_component(path: str) -> bool:
+    """パス要素に OneDrive が含まれるかを補助的に判定する。
+
+    これ単独では降下許可に使わず、Cloud 系 reparse tag と組み合わせる。
+    """
+    parts = re.split(r"[\\/]+", strip_long_path_prefix(str(path)))
+    return any(part.lower().startswith("onedrive") for part in parts if part)
 
 
 def resource_path(relative: str) -> str:
@@ -57,19 +124,54 @@ def human_size(num_bytes: float) -> str:
 
 
 def is_reparse_point(st: os.stat_result, entry: "os.DirEntry[str]") -> bool:
-    """エントリが reparse point（ジャンクション/シンボリックリンク等）かどうか.
+    """エントリが reparse point（ジャンクション/シンボリックリンク等）かどうか。"""
+    return classify_reparse_point(st, entry).is_reparse
 
-    Windows では ``st_file_attributes`` の REPARSE_POINT ビットで判定（ジャンクションも捕捉）。
-    Linux など ``st_file_attributes`` が無い環境では ``is_symlink()`` にフォールバックする。
-    **例外は投げない。**
+
+def classify_reparse_point(st: os.stat_result, entry: "os.DirEntry[str]") -> ReparseInfo:
+    """Windows reparse point を安全に分類する。
+
+    Windows では ``st_file_attributes`` と ``st_reparse_tag`` を使う。属性がない環境では
+    symlink 判定だけにフォールバックし、Cloud / junction と誤判定しない。
     """
-    attrs = getattr(st, "st_file_attributes", None)
-    if attrs is not None:
-        return bool(attrs & _FILE_ATTRIBUTE_REPARSE_POINT)
+    path = getattr(entry, "path", "")
+    tag = getattr(st, "st_reparse_tag", None)
+    tag_hex = f"0x{int(tag):08x}" if tag is not None else None
     try:
-        return entry.is_symlink()
+        is_link = entry.is_symlink()
     except OSError:
-        return False
+        is_link = False
+
+    attrs = getattr(st, "st_file_attributes", None)
+    attr_reparse = bool(attrs & _FILE_ATTRIBUTE_REPARSE_POINT) if attrs is not None else False
+    is_reparse = attr_reparse or is_link or tag is not None
+    cloud_tag = is_cloud_reparse_tag(int(tag)) if tag is not None else False
+    onedrive_path = is_under_onedrive_root(path) or has_onedrive_path_component(path)
+
+    if is_link or tag == IO_REPARSE_TAG_SYMLINK:
+        kind = "symlink"
+    elif tag == IO_REPARSE_TAG_MOUNT_POINT:
+        # Windows の junction と mount point は同じ reparse tag で表れる。安全側では同じ扱い。
+        kind = "junction"
+    elif cloud_tag and onedrive_path:
+        kind = "onedrive_cloud"
+    elif cloud_tag:
+        kind = "other_reparse"
+    elif is_reparse and tag is None:
+        kind = "unknown_reparse"
+    elif is_reparse:
+        kind = "other_reparse"
+    else:
+        kind = "normal"
+
+    return ReparseInfo(
+        kind=kind,
+        is_reparse=is_reparse,
+        tag=int(tag) if tag is not None else None,
+        tag_hex=tag_hex,
+        is_cloud_tag=cloud_tag,
+        is_onedrive_path=onedrive_path,
+    )
 
 
 def get_created_at(st: os.stat_result) -> Optional[float]:
