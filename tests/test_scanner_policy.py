@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 from storage_analyzer.config import Config
 from storage_analyzer.scanner import ScanStats, Scanner
-from storage_analyzer.utils import IO_REPARSE_TAG_MOUNT_POINT, IO_REPARSE_TAG_SYMLINK
+from storage_analyzer.utils import IO_REPARSE_TAG_MOUNT_POINT, IO_REPARSE_TAG_SYMLINK, classify_reparse_point
 
 
 class FakeDirEntry:
@@ -93,3 +93,13 @@ def test_reparse_record_limit_is_honored() -> None:
     for i in range(5):
         stats.add_reparse_record({"path": str(i)}, limit=2)
     assert stats.reparse_summary()["records"] == [{"path": "0"}, {"path": "1"}]
+
+
+def test_cloud_reparse_file_is_recorded_as_metadata_only() -> None:
+    scanner = make_scanner()
+    entry = FakeDirEntry(r"C:/Users/me/OneDrive/file.txt", attrs=0x400, tag=0x9000701A)
+    info = classify_reparse_point(entry.stat(False), entry)
+    scanner._record_reparse_file(entry.path, info)
+    summary = scanner.stats.reparse_summary()
+    assert summary["onedrive_cloud_file_detected"] == 1
+    assert summary["records"][0]["action"] == "file_metadata"

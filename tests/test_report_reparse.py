@@ -61,3 +61,61 @@ def test_html_report_renders_with_empty_reparse_data(tmp_path: Path) -> None:
     html = html_path.read_text(encoding="utf-8")
     assert "Scan Coverage / reparse point 対応" in html
     assert "reparse point の代表記録はありません" in html
+
+
+def test_manifest_records_onedrive_traversal_off_setting(tmp_path: Path) -> None:
+    manifest = tmp_path / "manifest-off.json"
+    write_manifest(
+        str(manifest),
+        stats=ScanStats(started_at=1.0, finished_at=2.0),
+        cfg=Config(traverse_onedrive_cloud_reparse=False),
+        target_original=".",
+        target_normalized=".",
+        target_label="root",
+        output_dir=str(tmp_path),
+        report_path=str(tmp_path / "report.html"),
+        scan_csv_path=str(tmp_path / "scan.csv"),
+        errors_csv_path=str(tmp_path / "errors.csv"),
+    )
+    data = json.loads(manifest.read_text(encoding="utf-8"))
+    assert data["traverse_onedrive_cloud_reparse"] is False
+    assert data["config_summary"]["traverse_onedrive_cloud_reparse"] is False
+
+
+def test_html_report_renders_onedrive_traversal_off_setting(tmp_path: Path) -> None:
+    empty = pd.DataFrame()
+    agg = AggregateResult(
+        total_bytes=0,
+        folders=empty,
+        extensions=empty,
+        categories=empty,
+        months=empty,
+        top_files=empty,
+        old_large=empty,
+        recent_large=empty,
+        skips=empty,
+        folder_direct={},
+        sankey_agg={},
+        root=str(tmp_path),
+    )
+    charts = {
+        "folder_bar": "",
+        "extension_bar": "",
+        "category": "",
+        "treemap": "",
+        "icicle": "",
+        "sankey": "",
+        "month_bar": "",
+    }
+    html_path = tmp_path / "report-off.html"
+    render_report(
+        str(html_path),
+        stats=ScanStats(),
+        agg=agg,
+        figures=charts,
+        cfg=Config(traverse_onedrive_cloud_reparse=False),
+        scan_target=".",
+    )
+    html = html_path.read_text(encoding="utf-8")
+    assert "OneDrive cloud=False" in html
+    assert "Scan Coverage / reparse point 対応" in html

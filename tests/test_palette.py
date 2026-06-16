@@ -1,3 +1,6 @@
+import inspect
+
+import storage_analyzer.palette as palette
 from storage_analyzer.palette import get_category_color, get_label_color, make_color_sequence
 
 
@@ -22,3 +25,9 @@ def test_make_color_sequence_matches_label_count() -> None:
     colors = make_color_sequence(labels)
     assert len(colors) == len(labels)
     assert colors[0] == colors[3]
+
+
+def test_palette_uses_hashlib_and_not_builtin_hash() -> None:
+    source = inspect.getsource(palette)
+    assert "hashlib.blake2b" in source
+    assert "hash(" not in source
