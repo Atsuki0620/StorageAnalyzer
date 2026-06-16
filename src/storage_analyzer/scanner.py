@@ -6,7 +6,8 @@
 - ディレクトリ単位・エントリ単位で try/except を張り、PermissionError / FileNotFoundError /
   OSError / 長すぎるパス / 走査中の消失などが起きても **処理全体を止めない**。捕捉した
   エラーは SkipRecord として skip コールバックに渡す。
-- ``count_files()`` は進捗バー用の **軽量な事前カウント**（stat を呼ばずファイル数だけ数える）。
+- ``count_files()`` は進捗バー用の **軽量な事前カウント**。ディレクトリだけは本スキャンと
+  reparse 降下ポリシーを揃えるため、分類用のメタデータ stat を行う。
 - ``iter_records()`` は FileRecord を 1 件ずつ **yield** するジェネレータ。CSV 書き込みや集計、
   tqdm によるラップは呼び出し側（main.py）が行い、メモリにレコードを溜め込まない。
 """
@@ -77,6 +78,8 @@ class ScanStats:
     mount_point_skipped: int = 0
     other_reparse_skipped: int = 0
     unknown_reparse_skipped: int = 0
+    onedrive_cloud_file_detected: int = 0
+    other_reparse_file_detected: int = 0
     reparse_records: list[dict[str, object]] | None = None
 
     @property
@@ -104,6 +107,8 @@ class ScanStats:
             "mount_point_skipped": self.mount_point_skipped,
             "other_reparse_skipped": self.other_reparse_skipped,
             "unknown_reparse_skipped": self.unknown_reparse_skipped,
+            "onedrive_cloud_file_detected": self.onedrive_cloud_file_detected,
+            "other_reparse_file_detected": self.other_reparse_file_detected,
             "records": list(self.reparse_records or []),
         }
 
@@ -221,6 +226,16 @@ class Scanner:
         self._visited_reparse_dirs.add(key)
         return False
 
+    def _record_reparse_file(self, path: str, info: ReparseInfo) -> None:
+        """クラウド/その他 reparse file を本文を読まずにメタデータ検出として記録する。"""
+        if info.kind == "onedrive_cloud":
+            self.stats.onedrive_cloud_file_detected += 1
+        elif info.is_reparse:
+            self.stats.other_reparse_file_detected += 1
+        else:
+            return
+        self._record_reparse_decision(path, info, "file_metadata", "ファイル本文を開かずメタデータのみ計上")
+
     def _record_reparse_decision(self, path: str, info: ReparseInfo, action: str, reason: str) -> None:
         if not self.config.record_reparse_points:
             return
@@ -315,6 +330,7 @@ class Scanner:
 
         # ファイル（symlink ファイルは follow=False の場合リンク自身を stat する）
         st = entry.stat(follow_symlinks=follow)
+        self._record_reparse_file(entry.path, classify_reparse_point(st, entry))
         size = int(st.st_size)
         name = entry.name
         ext = os.path.splitext(name)[1].lower()

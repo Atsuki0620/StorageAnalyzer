@@ -459,6 +459,8 @@
           <div class="dd-stat"><div class="l">symlink スキップ</div><div class="v">{{ "{:,}".format(reparse_summary.symlink_skipped) }}</div></div>
           <div class="dd-stat"><div class="l">junction スキップ</div><div class="v">{{ "{:,}".format(reparse_summary.junction_skipped) }}</div></div>
           <div class="dd-stat"><div class="l">その他 reparse スキップ</div><div class="v">{{ "{:,}".format(reparse_summary.other_reparse_skipped + reparse_summary.unknown_reparse_skipped) }}</div></div>
+          <div class="dd-stat"><div class="l">OneDrive cloud file 検出</div><div class="v">{{ "{:,}".format(reparse_summary.onedrive_cloud_file_detected) }}</div></div>
+          <div class="dd-stat"><div class="l">その他 reparse file 検出</div><div class="v">{{ "{:,}".format(reparse_summary.other_reparse_file_detected) }}</div></div>
         </div>
         <div class="note">設定: OneDrive cloud={{ traverse_onedrive_cloud_reparse }} / symlink={{ follow_symlinks }} / junction={{ follow_junctions }} / mount point={{ follow_mount_points }}</div>
         {% if reparse_summary.records %}

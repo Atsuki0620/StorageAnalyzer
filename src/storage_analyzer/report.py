@@ -117,6 +117,8 @@ def write_manifest(
         "junction_skipped": stats.junction_skipped,
         "mount_point_skipped": stats.mount_point_skipped,
         "other_reparse_skipped": stats.other_reparse_skipped,
+        "onedrive_cloud_file_detected": stats.onedrive_cloud_file_detected,
+        "other_reparse_file_detected": stats.other_reparse_file_detected,
         "config_summary": {
             "top_n_folders": cfg.top_n_folders,
             "top_n_files": cfg.top_n_files,

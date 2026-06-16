@@ -151,7 +151,8 @@ HTML 生成後、可能なら既定ブラウザで自動的に開きます。
 StorageAnalyzer は読み取り専用の診断ツールです。OneDrive Files On-Demand で使われる Cloud 系
 reparse point は、Windows の reparse tag と OneDrive 関連パス情報から安全に識別できる場合のみ、
 `os.scandir` と `stat` 中心のメタデータ走査として辿ります。ファイル本文を開いて内容確認することはなく、
-オンライン専用ファイルの強制ダウンロードも行いません。
+オンライン専用ファイルの強制ダウンロードも行いません。ファイル自体に Cloud 系 reparse 属性がある場合も、
+本文は読まず、サイズや更新日時など取得できるメタデータの範囲で扱います。
 
 一方で、シンボリックリンク / junction / mount point は循環や二重計上を避けるため既定では辿りません。
 OneDrive cloud reparse point の走査も `config.yaml` の `traverse_onedrive_cloud_reparse: false` で無効化できます。
